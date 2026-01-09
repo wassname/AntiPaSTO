@@ -1,0 +1,36 @@
+*.sty
+paper.*
+orcidlink.sty
+*.aux
+*.pdf
+*_files/
+*.html
+outputs/
+wandb/
+.anycache/
+
+# project
+__pycache__/
+.venv/
+
+# system
+*.pyc
+*.pyo
+*.pyd
+/venv/
+/dist/
+*.egg-info/
+.Python
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.env
+paper.md
+paper_files/
+
+**/mermaid*
+
+.gitignore
