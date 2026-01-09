@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 800 400"
+   version="1.1"
+   id="svg125"
+   sodipodi:docname="loss.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview127"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="2.2945615"
+     inkscape:cx="277.17714"
+     inkscape:cy="189.57871"
+     inkscape:window-width="2560"
+     inkscape:window-height="1364"
+     inkscape:window-x="0"
+     inkscape:window-y="40"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g113" />
+  <defs
+     id="defs17">
+    <!-- Subtle wood grain pattern -->
+    <pattern
+       id="woodGrain"
+       patternUnits="userSpaceOnUse"
+       width="200"
+       height="20">
+      <rect
+         width="200"
+         height="20"
+         fill="#f5f0e8"
+         id="rect3" />
+      <path
+         d="M0 3 Q50 1 100 3 T200 3"
+         stroke="#e8ddd0"
+         stroke-width="0.6"
+         fill="none"
+         id="path5" />
+      <path
+         d="M0 8 Q50 10 100 8 T200 8"
+         stroke="#e8ddd0"
+         stroke-width="0.5"
+         fill="none"
+         id="path7" />
+      <path
+         d="M0 14 Q50 12 100 14 T200 14"
+         stroke="#e8ddd0"
+         stroke-width="0.5"
+         fill="none"
+         id="path9" />
+      <path
+         d="M0 18 Q50 19 100 18 T200 18"
+         stroke="#e0d4c5"
+         stroke-width="0.4"
+         fill="none"
+         id="path11" />
+    </pattern>
+    <marker
+       id="arrowhead"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#333"
+         id="polygon2" />
+    </marker>
+    <marker
+       id="arrowhead-blue"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#2563eb"
+         id="polygon5" />
+    </marker>
+    <marker
+       id="arrowhead-red"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#dc2626"
+         id="polygon8" />
+    </marker>
+    <marker
+       id="arrowhead-gray"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#9ca3af"
+         id="polygon11" />
+    </marker>
+    <marker
+       id="arrowhead-green"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#16a34a"
+         id="polygon14" />
+    </marker>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="800"
+     height="400"
+     fill="#fafafa"
+     id="rect19" />
+  <!-- Title -->
+  <text
+     x="400"
+     y="35"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="18"
+     font-weight="600"
+     fill="#1f2937"
+     id="text21">AntiPaSTO: Anti-Parallel Subspace Training for Ordered Steering</text>
+  <!-- Left panel: Hidden state geometry ("pizza" layout) -->
+  <g
+     transform="translate(200, 280)"
+     id="g69">
+    <!-- Wooden oval platter base -->
+    <ellipse
+       cx="0"
+       cy="0"
+       rx="135"
+       ry="115"
+       fill="url(#woodGrain)"
+       id="ellipse_platter" />
+    <ellipse
+       cx="0"
+       cy="0"
+       rx="135"
+       ry="115"
+       fill="none"
+       stroke="#a67c00"
+       stroke-width="3"
+       id="ellipse_platter_edge" />
+    <!-- Coherence boundary - the outer circle (thick golden crust) -->
+    <!-- Center region: reference model -->
+    <text
+       x="8"
+       y="5"
+       font-family="system-ui, sans-serif"
+       font-size="11px"
+       font-weight="500"
+       fill="#78350f"
+       id="text47">ref</text>
+    <!-- d_+ (green, positive coef direction) - extends toward edge -->
+    <line
+       x1="0.14858943"
+       y1="-0.14517443"
+       x2="81.887939"
+       y2="-82.34816"
+       stroke="#15803d"
+       stroke-width="3.41545"
+       marker-end="url(#arrowhead-green)"
+       id="line53" />
+    <text
+       x="89.271255"
+       y="-89.821648"
+       font-family="system-ui, sans-serif"
+       font-size="13px"
+       font-weight="600"
+       fill="#15803d"
+       id="text55">δ₊ (α=+1)</text>
+    <!-- d_- (red, negative coef direction, antiparallel) - extends toward opposite edge -->
+    <line
+       x1="-0.14920633"
+       y1="0.16340436"
+       x2="-83.731796"
+       y2="81.818398"
+       stroke="#b91c1c"
+       stroke-width="3.44222"
+       marker-end="url(#arrowhead-red)"
+       id="line57" />
+    <text
+       x="-160.5511"
+       y="92.161667"
+       font-family="system-ui, sans-serif"
+       font-size="13px"
+       font-weight="600"
+       fill="#b91c1c"
+       id="text59">δ₋ (α=-1)</text>
+    <!-- d_ref (baseline, gray dashed) -->
+    <text
+       x="50"
+       y="-25"
+       font-family="system-ui, sans-serif"
+       font-size="10px"
+       fill="#78716c"
+       id="text_ref">d_ref</text>
+    <!-- Coherence label on boundary -->
+    <text
+       x="-186.55214"
+       y="-110.26467"
+       font-family="system-ui, sans-serif"
+       font-size="11px"
+       font-weight="700"
+       fill="#2563eb"
+       id="text_num3">3. Output Constraint</text>
+    <text
+       x="-184.94653"
+       y="-95.909515"
+       font-family="system-ui, sans-serif"
+       font-size="10px"
+       font-weight="500"
+       fill="#78350f"
+       id="text63">TV coherence</text>
+    <text
+       x="-184.94653"
+       y="-84.909515"
+       font-family="system-ui, sans-serif"
+       font-size="10px"
+       font-weight="500"
+       fill="#78350f"
+       id="text65">log barrier + LSE</text>
+    <!-- Dot product annotation -->
+    <line
+       x1="0"
+       y1="0"
+       x2="50"
+       y2="-25"
+       stroke="#78716c"
+       stroke-width="2"
+       stroke-dasharray="5,3"
+       marker-end="url(#arrowhead-gray)"
+       id="line41" />
+  </g>
+  <!-- Left panel label -->
+  <text
+     x="200"
+     y="68"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="13"
+     font-weight="700"
+     fill="#2563eb"
+     id="text_num1">1. Inner Loss</text>
+  <text
+     x="200"
+     y="85"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="14"
+     font-weight="500"
+     id="text79"><tspan
+       fill="#15803d"
+       id="tspan45">Honest</tspan><tspan
+       fill="#374151"
+       id="tspan47"> - </tspan><tspan
+       fill="#dc2626"
+       id="tspan49">Dishonest</tspan><tspan
+       fill="#374151"
+       id="tspan51"> Separation</tspan></text>
+  <text
+     x="200"
+     y="103"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="11"
+     fill="#6b7280"
+     id="text87">in hidden states (S-space)</text>
+  <!-- Vertical separator -->
+  <line
+     x1="400"
+     y1="60"
+     x2="400"
+     y2="380"
+     stroke="#e5e7eb"
+     stroke-width="1"
+     id="line89" />
+  <!-- Right panel: Log-prob geometry -->
+  <g
+     transform="translate(600, 200)"
+     id="g113">
+    <!-- Number line for delta_logp -->
+    <line
+       x1="-150"
+       y1="0"
+       x2="150"
+       y2="0"
+       stroke="#374151"
+       stroke-width="2"
+       marker-end="url(#arrowhead)"
+       id="line91" />
+    <!-- Zero point (cheese colored) -->
+    <line
+       x1="0"
+       y1="-8"
+       x2="0"
+       y2="8"
+       stroke="#f59e0b"
+       stroke-width="3"
+       id="line93" />
+    <text
+       x="0"
+       y="25"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="12"
+       fill="#92400e"
+       id="text95">0</text>
+    <text
+       x="0"
+       y="40"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="10"
+       fill="#a16207"
+       id="text97">(ref baseline)</text>
+    <!-- Delta_neg (should be negative, tomato red) -->
+    <circle
+       cx="-80"
+       cy="0"
+       r="8"
+       fill="#dc2626"
+       id="circle99" />
+    <text
+       x="-80"
+       y="-20"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="12"
+       font-weight="500"
+       fill="#b91c1c"
+       id="text101">Δ₋</text>
+    <!-- Delta_pos (should be positive, basil green) -->
+    <circle
+       cx="80"
+       cy="0"
+       r="8"
+       fill="#16a34a"
+       id="circle103" />
+    <text
+       x="80"
+       y="-20"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="12"
+       font-weight="500"
+       fill="#15803d"
+       id="text105">Δ₊</text>
+    <!-- Ordering arrows -->
+    <text
+       x="-121.30744"
+       y="-52.195171"
+       font-family="system-ui, sans-serif"
+       font-size="11px"
+       fill="#6b7280"
+       id="text107">Monotonic ordering:</text>
+    <text
+       x="-120"
+       y="-36.821392"
+       font-family="system-ui, sans-serif"
+       font-size="13px"
+       fill="#374151"
+       id="text109">Δ₋ &lt; 0 &lt; Δ₊</text>
+    <!-- Axis label -->
+    <text
+       x="155"
+       y="5"
+       font-family="system-ui, sans-serif"
+       font-size="11"
+       fill="#6b7280"
+       id="text111">Δ</text>
+  </g>
+  <!-- Right panel: Preference gap definition -->
+  <g
+     transform="translate(600, 300)"
+     id="g119">
+    <text
+       x="0"
+       y="0"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="12"
+       fill="#374151"
+       id="text115">Δ = change in preference gap</text>
+    <text
+       x="0"
+       y="18"
+       text-anchor="middle"
+       font-family="system-ui, sans-serif"
+       font-size="11"
+       fill="#6b7280"
+       id="text117">(steered model vs baseline)</text>
+  </g>
+  <!-- Right panel label -->
+  <text
+     x="600"
+     y="68"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="13"
+     font-weight="700"
+     fill="#2563eb"
+     id="text_num2">2. Output Constraint</text>
+  <text
+     x="600"
+     y="85"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="14"
+     font-weight="500"
+     fill="#374151"
+     id="text121">Monotonic Ordering</text>
+  <text
+     x="600"
+     y="103"
+     text-anchor="middle"
+     font-family="system-ui, sans-serif"
+     font-size="11"
+     fill="#6b7280"
+     id="text123">log-probability preference gap</text>
+</svg>

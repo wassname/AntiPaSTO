@@ -71,7 +71,7 @@ outputs/adapters/    # trained models
 
 ## Status
 
-Work in progress. Code released early for transparency; expect rough edges.
+Full research history (experiments, ablations, dead ends) available on request.
 
 ## Citation
 

@@ -1,0 +1,111 @@
+<svg viewBox="0 0 800 620" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definitions for markers and gradients -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+    <linearGradient id="gradFrozen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e0e7ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#cfd8fc;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gradLearnable" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff3cd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffe69c;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Styles -->
+  <style>
+    .label { font-family: sans-serif; font-size: 14px; text-anchor: middle; fill: #555; }
+    .title { font-family: sans-serif; font-size: 16px; font-weight: bold; text-anchor: middle; fill: #000; }
+    .math { font-family: serif; font-style: italic; font-size: 18px; text-anchor: middle; fill: #000; }
+    .box-frozen { fill: url(#gradFrozen); stroke: #4a5568; stroke-width: 2; }
+    .box-frozen-rotatable { fill: url(#gradFrozen); stroke: #d69e2e; stroke-width: 3; }
+    .box-learnable { fill: url(#gradLearnable); stroke: #d69e2e; stroke-width: 2; }
+    .path-line { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    .control-line { stroke: #d69e2e; stroke-width: 2; stroke-dasharray: 5,5; fill: none; marker-end: url(#arrowhead); }
+    .legend-text { font-family: sans-serif; font-size: 12px; fill: #555; }
+  </style>
+
+  <!-- Input -->
+  <text x="400" y="580" class="title">Input h</text>
+  
+  <!-- Split paths -->
+  <path d="M 400 560 L 400 540 L 200 540 L 200 500" class="path-line" /> <!-- To Left -->
+  <path d="M 400 540 L 600 540 L 600 500" class="path-line" /> <!-- To Right -->
+
+  <!-- LEFT BRANCH: Frozen Weights -->
+  <rect x="100" y="150" width="200" height="350" rx="5" class="box-frozen" />
+  <text x="200" y="325" class="title">Frozen residual</text>
+  <text x="200" y="350" class="math">W_res</text>
+
+  <!-- RIGHT BRANCH: AntiPaSTO Adapter -->
+  
+  <!-- 1. V * R(a) (Rotated Basis) -->
+  <!-- Trapezoid: Wide bottom, narrow top -->
+  <path d="M 520 500 L 680 500 L 660 420 L 540 420 Z" class="box-frozen-rotatable" />
+  
+  <text x="600" y="460" class="math">V · R(α)</text>
+  <text x="600" y="480" class="label" font-size="10">(input rotate)</text>
+
+  <!-- Arrow with rotation icon -->
+  <path d="M 600 420 L 600 380" class="path-line" />
+  <!-- Rotation Icon on arrow -->
+  <g transform="translate(585, 400)">
+    <path d="M 10 -10 A 12 12 0 1 1 0 -15" stroke="#d69e2e" stroke-width="3" fill="none" />
+    <polygon points="0 -15, 5 -20, -5 -20" fill="#d69e2e" />
+  </g>
+
+  <!-- 2. Scaling S -->
+  <rect x="560" y="320" width="80" height="60" rx="3" class="box-learnable" />
+  <text x="600" y="345" class="math">S + αΔS</text>
+  <text x="600" y="365" class="label">Scale S</text>
+
+  <!-- Arrow with rotation icon -->
+  <path d="M 600 320 L 600 280" class="path-line" />
+  <!-- Rotation Icon on arrow -->
+  <g transform="translate(585, 300)">
+    <path d="M 10 -10 A 12 12 0 1 1 0 -15" stroke="#d69e2e" stroke-width="3" fill="none" />
+    <polygon points="0 -15, 5 -20, -5 -20" fill="#d69e2e" />
+  </g>
+
+  <!-- 3. U^T * R(a)^T (Rotated Basis) -->
+  <!-- Trapezoid: Narrow bottom, wide top -->
+  <path d="M 540 280 L 660 280 L 680 200 L 520 200 Z" class="box-frozen-rotatable" />
+  
+  <text x="600" y="240" class="math">R(α)ᵀ · Uᵀ</text>
+  <text x="600" y="260" class="label" font-size="10">(output rotate)</text>
+
+  <!-- Output Merge -->
+  <path d="M 200 150 L 200 80 L 390 80" class="path-line" /> <!-- From Left -->
+  <path d="M 600 200 L 600 80 L 410 80" class="path-line" /> <!-- From Right -->
+
+  <!-- Summation Circle -->
+  <circle cx="400" cy="80" r="15" fill="#fff" stroke="#333" stroke-width="2" />
+  <text x="400" y="86" font-size="20" font-weight="bold" text-anchor="middle" fill="#333">+</text>
+
+  <!-- Final Output -->
+  <path d="M 400 65 L 400 40" class="path-line" />
+  <text x="400" y="30" class="title">Output h'</text>
+
+  <!-- Equation -->
+  <text x="400" y="610" class="math" font-size="14">h' = h W_resᵀ + h V R(α) (S + α·ΔS) R(α)ᵀ Uᵀ</text>
+
+  <!-- Coefficient Control -->
+  <text x="750" y="340" class="math" font-size="24" fill="#d69e2e">α</text>
+  <text x="750" y="365" class="label" font-size="12">∈ {-1, 0, +1}</text>
+  <text x="750" y="385" class="label" font-size="10">(Steering)</text>
+  
+  <!-- Coefficient lines to blocks -->
+  <path d="M 730 340 L 640 340" class="control-line" /> <!-- To S -->
+  <path d="M 730 340 L 700 340 L 700 470 L 660 470" class="control-line" /> <!-- To V -->
+  <path d="M 730 340 L 700 340 L 700 230 L 660 230" class="control-line" /> <!-- To U -->
+
+  <!-- Legend -->
+  <rect x="50" y="500" width="20" height="20" class="box-frozen" />
+  <text x="80" y="515" class="legend-text">Frozen / Static</text>
+  
+  <rect x="50" y="530" width="20" height="20" class="box-learnable" />
+  <text x="80" y="545" class="legend-text">Learnable / Steerable</text>
+
+</svg>

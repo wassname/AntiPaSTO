@@ -1,0 +1,12 @@
+[
+	{"idx":524,"dilemma_idx":1687,"action_type":"to_do","action":"Quit the job immediately","party":"You","party_type":"direct","value":"Integrity"},
+	{"idx":525,"dilemma_idx":1687,"action_type":"to_do","action":"Quit the job immediately","party":"Your employer","party_type":"direct","value":"Accountability"},
+	{"idx":526,"dilemma_idx":1687,"action_type":"to_do","action":"Quit the job immediately","party":"Your family","party_type":"indirect","value":"Responsibility"},
+	{"idx":527,"dilemma_idx":1687,"action_type":"to_do","action":"Quit the job immediately","party":"Potential future employers","party_type":"indirect","value":"Trustworthiness"},
+	{"idx":528,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"You","party_type":"direct","value":"Complicity"},
+	{"idx":529,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"Your employer","party_type":"direct","value":"Dishonesty"},
+	{"idx":530,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"Law enforcement agencies","party_type":"direct","value":"Justice"},
+	{"idx":531,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"Your family","party_type":"indirect","value":"Uncertainty"},
+	{"idx":532,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"Media","party_type":"indirect","value":"Truth"},
+	{"idx":533,"dilemma_idx":1687,"action_type":"not_to_do","action":"Stay in the job","party":"Society","party_type":"indirect","value":"Ethics"}
+]
