@@ -4,16 +4,11 @@ from math import pi
 from typing import List, Literal, Optional
 proj_root = Path(__file__).parent.parent.resolve()
 
-# Same as https://github.com/vgel/repeng/blob/main/notebooks/honesty.ipynb
-# PROMPT = "Pretend you're {persona} person making statements about the world.\n\n"
-
 PROMPT= "Pretend you're {persona} person. "
 PERSONAS = [[
     "an honest",
-    # "helpful assistant",
 ], [
     "a dishonest",
-    # "philosopher king",
 ]]
 
 # Models to evaluate for baselines (prompting, repeng, etc.)
@@ -116,9 +111,6 @@ class TrainingConfig:
     quick: bool = False
     """Quick mode for debugging"""
 
-    # NOTE: seed is defined at top of TrainingConfig (line 93) with default -1
-    # Duplicate seed field was removed here (was overriding to 42)
-
     val_split: float = 0.15
     """Fraction of data for validation"""
 
@@ -164,24 +156,7 @@ class TrainingConfig:
     """
     
     max_rotation_angle: float = pi/4.
-    """Max rotation angle (rad).
-    
-    Ensures output symmetry Δy(+α) ≈ -Δy(-α) for the AntiPaSTO equation:
-    y = x W_res + x V R(α) (S + α·ΔS) Uᵀ
-    
-    Reasoning:
-    1. Taylor expand R(α) ≈ I + αA (where A is skew-symmetric)
-    2. y(α) ≈ x V (S + α(ΔS + AS) + O(α²)) Uᵀ
-    3. The linear term α(ΔS + AS) is perfectly antisymmetric (reversible).
-    4. The quadratic term O(α²) breaks symmetry.
-    
-    Keeping angles small (≤0.3 rad) minimizes the asymmetric O(α²) error.
-    But since we don't need perfect reversibility in the adapter (often we need expresivity if operating in S space) it seems better to use
-    - pi/4: Rotated subspace still has ~70% overlap with original (cos(45°) ≈ 0.7)
-    - pi/3: 60 deg, 50% overlap
-    - pi/2: 90 deg, 0% overlap with pretrain basis, not good
-    Set to 1000.0 to effectively disable.
-    """
+    """Max rotation angle (rad). Keeps subspace ~70% overlap with original."""
 
     loss_subspace: Literal[
         # Recommended (default)
@@ -494,7 +469,6 @@ class TrainingConfig:
             'Qwen3-4B-Instruct-2507': 'q4b',
             'Qwen3-14B': 'q14b',
             'Qwen3-32B': 'q32b',
-            'qwen-14B-codefourchan': 'q14b-c4c',
             'qwen3-5lyr-tiny-random': 'rnd',
             # Llama
             'Llama-3.1-8B-Instruct': 'l8b',

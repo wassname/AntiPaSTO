@@ -560,11 +560,6 @@ class GradientSelection:
         return self.subspaces.suppressed
 
 
-# NOTE: SSpaceGradients dataclass and compute_hidden_space_gradients() were removed in cleanup (Jan 2026).
-# They were deprecated in v2.2+ - ablations showed no improvement over simple selection.
-# Use compute_simple_layer_selection() instead (uniform layers, top-S dims, no backward pass).
-
-
 def compute_simple_layer_selection(
     model: nn.Module,
     r: int,
@@ -1271,20 +1266,3 @@ def compute_simple_layer_selection(
         precomputed_indices=precomputed_indices,
         subspaces=subspaces,
     )
-
-
-# NOTE: compute_gradient_layer_selection was removed in cleanup (Jan 2026).
-# It was deprecated in v2.2+ and ablations showed no improvement over simple selection.
-# See git history for the ~400-line implementation if needed for research.
-#
-# Use compute_simple_layer_selection() instead - it uses:
-#   - Uniform layer selection across valid depth range
-#   - top_s dimension selection (top-r singular values)
-#   - No backward pass (no OOM on 12B+ models)
-
-
-DELETED_GRADIENT_SELECTION_LINES = 400  # marker: grep to verify deletion was done
-
-# Note: get_steering_weighted_basis() was removed in Jan 2026 cleanup.
-# It was only used by steer* loss_subspace options which are now removed.
-# See git history for the implementation (~230 lines).

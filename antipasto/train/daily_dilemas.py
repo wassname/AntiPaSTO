@@ -9,7 +9,6 @@ from datasets import load_dataset, Dataset
 from loguru import logger
 from tabulate import tabulate
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 from transformers import DataCollatorWithPadding
 from datasets import concatenate_datasets
 from antipasto.eval import gen_with_choices
@@ -580,7 +579,6 @@ def process_daily_dilemma_results(df_res, dd_dataset, df_labels):
     ]
     df_res2 = df_res.merge(df_ds, on=["dilemma_idx", "idx"])
 
-    # Vectorized probability calculations
     df_res2["act_prob"] = np.exp(df_res2["logratio"]) / (
         1 + np.exp(df_res2["logratio"])
     )
@@ -594,14 +592,11 @@ def process_daily_dilemma_results(df_res, dd_dataset, df_labels):
         reversed_mask, -df_res2["logratio"], df_res2["logratio"]
     )
 
-    # Merge labels per side (modified)
     df_labels_reset = df_labels.reset_index()
     df_res2 = df_res2.merge(df_labels_reset, on=["dilemma_idx", "action_type"], how="left").copy()
 
-    # Vectorized score computation (unchanged logic, but now labels are side-specific/NaN-aware)
-    label_cols = [c for c in df_res2.columns if "/" in c and c not in ["dilemma_idx", "action_type"]]  # Virtues have "/"
+    label_cols = [c for c in df_res2.columns if "/" in c and c not in ["dilemma_idx", "action_type"]]
 
-    # Compute all score columns at once to avoid fragmentation warnings
     score_dfs = []
     for col in label_cols:
         score_dfs.append(pd.DataFrame({
@@ -615,19 +610,11 @@ def process_daily_dilemma_results(df_res, dd_dataset, df_labels):
         df_res2 = pd.concat([df_res2, df_scores], axis=1)
 
     cols_labels = [c for c in df_res2.columns if c.startswith("logscore_")]
-    
-    # means = df_res2[cols_labels].mean()
-
-
-    # What are the units? since it's logratio * label, it's the nat's toward each label
-    cols_labels = [c for c in df_res2.columns if c.startswith("logscore_")]
     df_res_pv = df_res2.groupby(["method", "coeff"], dropna=False)[cols_labels].mean().T
     df_res_pv.index = [s.lstrip("logscore_") for s in df_res_pv.index]
 
-    # replace NaN with 'disabled'
     df_res_pv.columns = pd.MultiIndex.from_frame(df_res_pv.columns.to_frame().fillna('disabled'))
 
-    # reorder so truthfulness at top, then all ones starting with Virtue/ then MFT, then Emotion
     df_res_pv = df_res_pv.reindex(
         sorted(
             df_res_pv.index,
@@ -1194,7 +1181,8 @@ def _compute_steering_f1_for_method(
     
     if len(y_neg_t) == 0 or len(y_neg_a) == 0:
         return {"steering_f1": np.nan, "net_correct": np.nan, "correct_w": np.nan,
-                "wrong_w": np.nan, "arb_w": np.nan, "precision": np.nan,
+                "wrong_w": np.nan, "arb_w": np.nan, "correct_rate": np.nan,
+                "wrong_rate": np.nan, "arb_rate": np.nan, "precision": np.nan,
                 "recall": np.nan, "pmass_ratio": np.nan}
     
     return compute_steering_f1(
@@ -1356,7 +1344,7 @@ def compute_bidir_transfer_summary(
                 df_m, coeff_mag, target_col
             )
             
-            # Steering F1: main metric (z-weighted precision-recall with net_correct)
+            # Steering F1: main metric (importance-sampled precision-recall with net_correct)
             f1_metrics = _compute_steering_f1_for_method(
                 df_m, coeff_mag, target_col,
                 pmass_pos=pmass_pos, pmass_neg=pmass_neg, pmass_ref=pmass_ref,
@@ -1396,6 +1384,9 @@ def compute_bidir_transfer_summary(
                     "f1_correct_w": f1_metrics["correct_w"],
                     "f1_wrong_w": f1_metrics["wrong_w"],
                     "f1_arb_w": f1_metrics["arb_w"],
+                    "f1_correct_rate": f1_metrics["correct_rate"],
+                    "f1_wrong_rate": f1_metrics["wrong_rate"],
+                    "f1_arb_rate": f1_metrics["arb_rate"],
                     "f1_precision": f1_metrics["precision"],
                     "f1_recall": f1_metrics["recall"],
                     **flip_metrics,
@@ -1468,26 +1459,26 @@ def format_main_results_table(
     summary = summary.sort_values(["coeff_mag", "method"], ascending=[False, True])
 
     # Build Main Table: Steering Quality
-    # NOTE: Uses BIDIRECTIONAL metrics (flip = sign(y_neg) != sign(y_pos))
-    # for Tgt Flip%, Tgt Δ, Wrong Flip%, Wrong Δ for internal consistency.
-    # Steering F1 uses ONE-SIDED metrics (baseline→+coeff) which is different!
+    # NOTE: All flip metrics (Tgt%, Wrong%, Arb%, F1 components) use ONE-SIDED definition:
+    # baseline→+coeff only, after canonicalization so +coeff = toward target.
+    # This ensures Tgt%/Tgt_w (correct_rate/correct_w) are consistent.
+    # Only Focus still uses bidirectional definition for backward compatibility.
     rows = []
     for _, row in summary.iterrows():
         method = row["method"]
         nll_deg = row["degradation_nll"]
         pmass_loss_total_nats = row.get("pmass_loss_total_nats", np.nan)
 
-        # Bidirectional flip metrics (sign(y_neg) != sign(y_pos))
-        flip_rate = row.get("flip_rate", np.nan)
+        # Bidirectional flip metrics - only used for Focus and Tgt Δ
         cond_strength = row.get("cond_flip_strength", np.nan)
-        arb_flip_rate = row.get("arb_flip_rate", np.nan)
-        arb_cond_strength = row.get("arb_cond_strength", np.nan)
         focus = row.get("focus", np.nan)
-        
-        # Bidirectional wrong-direction flips (flips in minority direction)
-        # This is consistent with flip_rate/cond_strength above
-        target_wrong_flip_rate = row.get("target_wrong_flip_rate", np.nan)
         target_cond_strength_wrong = row.get("target_cond_strength_wrong", np.nan)
+        
+        # One-sided rates from F1 (baseline→+coeff, same definition as correct_w/wrong_w)
+        # Use these for Tgt%/Wrong%/Arb% to be consistent with F1's weighted components
+        f1_correct_rate = row.get("f1_correct_rate", np.nan)
+        f1_wrong_rate = row.get("f1_wrong_rate", np.nan)
+        f1_arb_rate = row.get("f1_arb_rate", np.nan)
         
         # Steering F1: main metric (uses ONE-SIDED definition, different from above!)
         # correct_w/wrong_w are baseline→+coeff flips, not bidirectional
@@ -1500,13 +1491,13 @@ def format_main_results_table(
             "F1": steering_f1,
             "Net": f1_net_correct,  # net_correct = correct_w - wrong_w (one-sided)
             "Prec": f1_precision,   # precision component
-            # Bidirectional metrics (consistent with each other):
-            "Tgt Flip%": flip_rate,
-            "Tgt Δ": cond_strength,  # E[Δ | flip]
-            "Wrong%": target_wrong_flip_rate,  # Flips in wrong direction (bidirectional)
-            "Wrong Δ": target_cond_strength_wrong,  # E[Δ | wrong flip] (bidirectional)
-            "Arb Flip%": arb_flip_rate,
-            "Focus": focus,
+            # One-sided metrics (baseline→+coeff, consistent with F1 definition):
+            "Tgt Flip%": f1_correct_rate,  # P(baseline wrong AND +coeff fixed), unweighted
+            "Tgt Δ": cond_strength,  # E[Δ | flip] (bidirectional, for magnitude)
+            "Wrong%": f1_wrong_rate,  # P(baseline right AND +coeff broke), unweighted
+            "Wrong Δ": target_cond_strength_wrong,  # E[Δ | wrong flip]
+            "Arb Flip%": f1_arb_rate,  # P(arb flip from baseline), unweighted
+            "Focus": focus,  # bidirectional target/arb ratio (kept for comparability)
             "Coh": nll_deg,
             "Nats": pmass_loss_total_nats,
         })
@@ -1558,7 +1549,6 @@ def format_main_results_table(
     })
 
     main_table_md = tabulate(df_display, tablefmt="pipe", headers="keys", floatfmt=".4g", showindex=False)
-    n_other = summary.iloc[0].get("total_values", 30) - 1
     eval_size = config.eval_max_dilemmas or 1360
     caption = CAPTION_MAIN_RESULTS.format(
         model_name=config.model_name,

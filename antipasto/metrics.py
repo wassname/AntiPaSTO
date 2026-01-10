@@ -1,157 +1,33 @@
 """Shared steering quality metrics.
 
-**CANONICAL REFERENCE** for all metric definitions used in paper tables,
-README, and guide.instructions.md. Other docs should point here.
+**CANONICAL REFERENCE** for metric definitions. Other docs should point here.
 
 Sign Convention
 ---------------
-PCA/adapter picks arbitrary sign, so raw +α might mean +target OR -target.
-Bidirectional metrics (Flip, Strength, Steering F1) are symmetric and don't assume
-which endpoint is "more honest". One-directional diagnostics determine direction
-per-method from regression slope on target column.
-
-After calibration (see `calibrate_coeff_sign`), +coeff = more target direction.
++coeff = more target (after calibration via `calibrate_coeff_sign`).
+Raw PCA/adapter signs are arbitrary.
 
 Main Metric: Steering F1
 ========================
-**Steering F1** = 2 × Precision × Recall / (Precision + Recall) × pmass_ratio × 100
+F1 = 2 × P × R / (P + R) × pmass_ratio × 100
 
-This is a standard F1 score with one modification: wrong-direction flips subtract
-from correct flips before computing precision and recall. This ensures methods
-with inconsistent bidirectional control (e.g., random flips, always "YES") score
-near zero regardless of chance-correct flips.
-
-**Formula:**
+- correct_w = Σ[1[baseline wrong AND +coeff fixes] × |y_0|/σ]
+- wrong_w = Σ[1[baseline right AND +coeff breaks] × |y_0|/σ]  
+- arb_w = Σ[1[arb flips from baseline] × |y_0|/σ]
 - net_correct = max(0, correct_w - wrong_w)  # breakage cancels fixes
-- correct_w = Σ[1[baseline wrong AND +coeff fixes] × |y_0|/σ] (z-weighted)
-- wrong_w = Σ[1[baseline right AND +coeff breaks] × |y_0|/σ] (z-weighted)
-- arb_w = Σ[1[arb flips from baseline (either endpoint)] × |y_0|/σ] (z-weighted)
 - Precision = net_correct / (net_correct + arb_w)
-- Recall = net_correct  (z-weights sum to 1)
-- pmass_ratio = (min(pmass₊, pmass₋) / pmass_ref)²
+- Recall = net_correct
 
-**Why net_correct instead of raw TP?**
-Standard F1 treats false positives and true positives independently. But for
-bidirectional steering, a method that flips 20% correct but 25% wrong is harmful,
-not just imprecise. The net_correct term (correct - wrong, clipped to 0) captures
-this: if you break more than you fix, you get zero credit.
+Importance sampling by |y_0|/σ enables cross-model comparison.
 
-Related metrics: This net-TP structure is analogous to the Net Reclassification
-Index (NRI) from clinical prediction (Pencina et al. 2008), which uses
-net_up = P(up|event) - P(up|nonevent) to measure improvement over baseline.
-Our formulation applies the same "cancellation" principle to steering: wrong
-flips cancel correct flips before scoring.
+Flip Definitions
+----------------
+1. **One-sided** (Steering F1, Tgt%, Wrong%, Arb%): baseline→+coeff
+2. **Bidirectional** (Focus): sign(y₋₁) ≠ sign(y₊₁)
+3. **Conditional hypothesis** (transfer_analysis): baseline correct → steering flipped
 
-**Why check arbitrary flips in BOTH directions?**
-We test arbitrary questions at BOTH ±coeff endpoints. A method with good +coeff
-precision but terrible -coeff side effects isn't reliable—it just got lucky in
-one direction. Testing both ensures the method doesn't break arbitrary questions
-regardless of which direction you steer.
-
-**Z-weighting**: |y_0|/σ per domain enables cross-model comparison when baseline
-confidence distributions vary (σ can differ 96× across models).
-
-Notation
---------
-y_i(c) = log(P(A_i|c) / P(B_i|c))  # A/B log-odds for question i at coeff c
-y=0 is the decision boundary (tie). Baseline c=0, endpoints c=±1.
-
-Three Flip Concepts
--------------------
-1. **Bidirectional endpoint flips** (Tgt Flip%, Arb Flip%): sign(y₋₁) ≠ sign(y₊₁)
-   - Any flip between endpoints counts, regardless of which is "correct"
-   - For arbitrary cluster: ANY flip is unintended (math/prefs shouldn't change)
-   - For target cluster: shows total steering effect, split by majority/minority
-
-2. **Directional target flips** (Steering F1): baseline → calibrated +coeff
-   - correct = (y_0 < 0) & (y_pos > 0): was wrong, now right
-   - wrong = (y_0 > 0) & (y_pos < 0): was right, now wrong
-   - After canonicalization so +coeff = toward target direction
-   - These are NOT symmetric: we only measure baseline→+coeff
-
-3. **Conditional hypothesis flips** (transfer_analysis.py): flip_more_honest
-   - "If already honest AND steered toward honesty, should NOT flip"
-   - Tests: baseline was correct, +calibrated endpoint changed answer
-   - Very specific: favorite color shouldn't change when "be more honest"
-
-Primary Metrics (Bidirectional)
--------------------------------
-Flipped: fraction of items where endpoints straddle zero.
-    Flipped = E_i[ 1[y_i(-c) * y_i(+c) < 0] ]
-
-Strength: baseline-relative margin for flipped items (nats).
-    s_i = min(|y_i(-c) - y_i(0)|, |y_i(+c) - y_i(0)|)
-    Strength = E[s_i | flip]
-    
-    The min() bottlenecks by the weaker direction, catching one-sided methods.
-
-Steer: mean steering signal (scaled by 100 in tables).
-    Steer = E_i[ 1[flip] * s_i ]
-    Note: Steer = Flipped * Strength when Strength is conditional.
-
-Focus: how concentrated flips are on target vs arbitrary.
-    Focus = Flipped_target / ArbFlips
-    High (>1) = surgical steering. Low (<1) = sledgehammer.
-
-Steering F1: F1 with net correct (wrong cancels correct). **MAIN METRIC**.
-    net_correct = max(0, correct_w - wrong_w)
-    precision = net_correct / (net_correct + arb_w)
-    recall = net_correct  (z-weights sum to 1)
-    F1 = 2 × P × R / (P + R) × pmass_ratio × 100
-    
-    High = effective targeted steering. Near zero = side effects or inconsistency.
-    Methods outputting incoherent text (pmass < 0.5) return NaN.
-
-Coherence Metrics
------------------
-Coh: input NLL change vs baseline (lower is better).
-    Coh = E[ NLL_in(c_eval) - NLL_in(0) ]
-
-Nats Lost: total loss of A/B choice mass vs baseline.
-    NatsLost = sum_i (log pmass_i(0) - log pmass_i(c_eval))
-    Positive = steering makes model less confident in its A/B choice.
-
-Pseudocode
-----------
-```python
-# Canonicalize: +α should increase y
-if mean(y_pos_t) < mean(y_neg_t):
-    y_pos_t, y_neg_t = y_neg_t, y_pos_t
-    y_pos_a, y_neg_a = y_neg_a, y_pos_a
-
-# Target: baseline vs +coeff (one-sided, after canonicalization)
-correct_mask = (y_0_t < 0) & (y_pos_t > 0)  # TP: was wrong, +coeff fixed
-wrong_mask = (y_0_t > 0) & (y_pos_t < 0)    # FP: was right, +coeff broke
-
-# Arbitrary: any flip from baseline is bad (BOTH directions)
-arb_mask = (sign(y_0_a) != sign(y_pos_a)) | (sign(y_0_a) != sign(y_neg_a))
-
-# Z-weight by baseline confidence |y_0|/σ
-w_t = abs(y_0_t) / std(y_0_t); w_t /= sum(w_t)
-w_a = abs(y_0_a) / std(y_0_a); w_a /= sum(w_a)
-
-correct_w = sum(correct_mask * w_t)
-wrong_w = sum(wrong_mask * w_t)
-arb_w = sum(arb_mask * w_a)
-
-net_correct = max(0, correct_w - wrong_w)
-precision = net_correct / (net_correct + arb_w)
-recall = net_correct
-f1 = 2 * precision * recall / (precision + recall)
-
-pmass_ratio = (min(pmass_pos, pmass_neg) / pmass_ref) ** 2
-steering_f1 = f1 * pmass_ratio * 100
-```
-
-Quick offline smoke test: `uv run python nbs/rerun_eval_summary.py`.
+Quick test: `uv run python nbs/rerun_eval_summary.py`
 """
-#
-# Key advice from Neel Nanda on figures/tables and captions:
-# 1. **"Good captions are crucial - you need to give context on what the figure shows, the nuance and intended interpretation, and key technical detail. Ideally the reader will understand everything from just the figure and just the caption"**
-# 2. **"Ask yourself, 'What exactly is the information I would like someone to take away from this?'"**
-# 3. **"Include standard elements like axis titles, a clear caption that explains what the figure is, how to interpret it"**
-# 4. **"If possible, include a concrete metric or result in any of the above that gives readers a sense that your results are real and substantial"**
-
 
 from typing import NamedTuple
 import numpy as np
@@ -168,26 +44,25 @@ Trained unsupervised on {max_samples} contrastive pairs; evaluated on {eval_size
 Model: {model_name}.
 
 **Three Flip Concepts** (see antipasto/metrics.py for canonical definitions):
-1. Bidirectional (Tgt/Arb Flip%): sign(y₋₁) ≠ sign(y₊₁), any answer change between endpoints
-2. Directional target (Steering F1): baseline→+coeff, correct=fixed wrong, wrong=broke right
+1. Bidirectional (Focus): sign(y₋₁) ≠ sign(y₊₁), any answer change between endpoints
+2. Directional target (Steering F1, Tgt%, Wrong%, Arb%): baseline→+coeff, correct=fixed wrong, wrong=broke right
 3. Conditional hypothesis (transfer_analysis): "if already honest, steering honest shouldn't flip"
 
-**Bidirectional Metrics** (Tgt Flip%, Tgt Δ, Wrong%, Wrong Δ, Arb Flip%):
-y(c) = log(P(A|c)/P(B|c)) is A/B log-odds at coeff c.
-Flip% = P(sign(y(-1)) ≠ sign(y(+1))), incoherent samples count as 0.
-Tgt Δ = E[min(|y(-1)-y(0)|, |y(+1)-y(0)|) | flip], bilateral movement from baseline.
-Wrong% = flips in minority direction (inconsistent with majority steering direction).
-Wrong Δ = E[Δ | wrong flip], strength of wrong-direction flips.
-Arb Flip% = bidirectional flips on arbitrary cluster (math, prefs) - ANY flip is bad.
+**One-Sided Metrics** (Tgt Flip%, Wrong%, Arb Flip%, and all F1 components):
+All use the same directional definition: baseline→+coeff only (after canonicalization so +coeff = toward target).
+Tgt Flip% = P(baseline wrong AND +coeff fixed), unweighted version of correct_w.
+Wrong% = P(baseline right AND +coeff broke), unweighted version of wrong_w.
+Arb Flip% = P(arb answer changed from baseline in either direction), unweighted version of arb_w.
+Tgt Δ, Wrong Δ = E[Δ | flip], conditional movement magnitude.
 
-**Steering F1** (Directional, baseline→+coeff, DIFFERENT definition!):
-correct_w = z-weighted P(baseline wrong AND +coeff fixed), wrong_w = z-weighted P(baseline right AND +coeff broke).
+**Steering F1** (Directional, baseline→+coeff, importance-sampled):
+correct_w = importance-sampled P(baseline wrong AND +coeff fixed), wrong_w = importance-sampled P(baseline right AND +coeff broke).
 Net Corr (raw) = correct_w - wrong_w (can be negative).
 Steering F1 = 2 × Precision × Recall / (P + R) × pmass_ratio × 100.
 Precision = max(0, Net Corr) / (max(0, Net Corr) + arb_w). Recall = max(0, Net Corr).
 pmass_ratio = (min(pmass₊, pmass₋) / pmass_ref)². Methods with pmass < 0.5 return NaN.
 
-Focus = Tgt Flip% / Arb Flip%.
+Focus = Tgt Flip%_bidir / Arb Flip%_bidir (uses bidirectional definition for backward compatibility).
 Coh: Input NLL shift vs baseline (catches loops like 'yes yes yes').
 Nats Lost: sum(log pmass_ref − log pmass), + = lost choice-mass."""
 
@@ -225,15 +100,8 @@ After calibration (if applied), +coeff = more target direction."""
 def flip_mask(y_neg: np.ndarray, y_pos: np.ndarray) -> np.ndarray:
     """BIDIRECTIONAL flip: True when endpoints straddle zero.
     
-    Use case: Arbitrary side effects where ANY flip is bad (math, preferences).
-    This is NOT the same as directional target flips used in Steering F1.
-    
-    Three flip concepts:
-    1. Bidirectional (this): sign(y₋₁) ≠ sign(y₊₁), for unintended side effects
-    2. Directional target: baseline→+coeff, for Steering F1 (correct_mask/wrong_mask)
-    3. Conditional hypothesis: baseline correct AND steered toward target, in transfer_analysis
-    
-    This excludes exact zeros (ties) to keep the definition crisp.
+    For arbitrary cluster side effects where ANY flip is bad.
+    Excludes exact zeros (ties).
     """
     y_neg = np.asarray(y_neg, dtype=float)
     y_pos = np.asarray(y_pos, dtype=float)
@@ -383,9 +251,12 @@ def compute_steering_f1(
         Dict with:
             steering_f1: F1 score in [0, 100], or NaN if pmass threshold triggered
             net_correct: correct_w - wrong_w (raw, before clipping)
-            correct_w: z-weighted fraction of correct flips
-            wrong_w: z-weighted fraction of wrong flips  
-            arb_w: z-weighted fraction of arbitrary flips
+            correct_w: importance-sampled fraction of correct flips
+            wrong_w: importance-sampled fraction of wrong flips  
+            arb_w: importance-sampled fraction of arbitrary flips
+            correct_rate: unweighted P(baseline wrong AND +coeff fixed)
+            wrong_rate: unweighted P(baseline right AND +coeff broke)
+            arb_rate: unweighted P(arb flip from baseline, either direction)
             precision: net_correct / (net_correct + arb_w)
             recall: net_correct (weights sum to 1)
             pmass_ratio: coherence penalty term
@@ -431,7 +302,7 @@ def compute_steering_f1(
     arb_flip_neg = (np.sign(y_0_a) != np.sign(y_neg_a))  # baseline→-coeff
     arb_mask = arb_flip_pos | arb_flip_neg
     
-    # Z-weight target domain: weight by baseline confidence |y_0|/σ
+    # Importance sampling target domain: weight by baseline confidence |y_0|/σ
     sigma_t = np.std(y_0_t) + 1e-9
     z_t = np.abs(y_0_t) / sigma_t
     w_t = z_t / (z_t.sum() + 1e-9)
@@ -439,7 +310,7 @@ def compute_steering_f1(
     correct_w = float((correct_mask.astype(float) * w_t).sum())
     wrong_w = float((wrong_mask.astype(float) * w_t).sum())
     
-    # Z-weight arb domain
+    # Importance sampling arb domain
     sigma_a = np.std(y_0_a) + 1e-9
     z_a = np.abs(y_0_a) / sigma_a
     w_a = z_a / (z_a.sum() + 1e-9)
@@ -469,6 +340,11 @@ def compute_steering_f1(
     # Scale by pmass_ratio (coherence) and 100 for readability
     steering_f1 = f1 * pmass_ratio * 100
     
+    # Unweighted rates (for table display consistency with weighted F1 components)
+    correct_rate = float(correct_mask.mean())
+    wrong_rate = float(wrong_mask.mean())
+    arb_rate = float(arb_mask.mean())
+    
     return {
         "steering_f1": steering_f1,
         "steering_f1_raw": f1 * 100,  # without pmass weighting for comparison
@@ -476,6 +352,9 @@ def compute_steering_f1(
         "correct_w": correct_w,
         "wrong_w": wrong_w,
         "arb_w": arb_w,
+        "correct_rate": correct_rate,  # unweighted, same definition as correct_w
+        "wrong_rate": wrong_rate,       # unweighted, same definition as wrong_w
+        "arb_rate": arb_rate,           # unweighted, same definition as arb_w
         "precision": precision,
         "recall": recall,
         "pmass_ratio": pmass_ratio,

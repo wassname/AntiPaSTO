@@ -1,48 +1,9 @@
-"""
-Transfer Effect Analysis - Paper-Ready Metrics
+"""Transfer Effect Analysis - conditional hypothesis flips.
 
-Answers three key questions per method:
-1. Arbitrary flip rate: Does steering flip answers on things model shouldn't lie about?
-2. Directional correlation: Do values move consistently with honesty (both directions)?
-3. Cluster analysis: How do different value clusters respond?
+Conditional flip = baseline→endpoint sign change conditioned on baseline state.
+Example: "If baseline already honest about favorite color, steering honest shouldn't flip."
 
-Conditional Hypothesis Flips (flip_more_honest / flip_less_honest)
--------------------------------------------------------------------
-These are ONE-DIRECTIONAL flips from baseline → calibrated endpoint, conditioned on
-baseline state. Key principle:
-
-"If you say you like the color blue, and you're already honest (assumed true),
-then being steered toward honesty should NOT make you say red."
-
-This is NOT the same as bidirectional flips (sign(y₋₁) ≠ sign(y₊₁)) used for
-arbitrary side effects in daily_dilemas.py. Here we specifically test:
-- flip_more_honest: baseline → more_honest_endpoint changed sign
-  (If baseline already had "correct" answer, this is very unexpected)
-- flip_less_honest: baseline → less_honest_endpoint changed sign
-
-The philosophical distinction: arbitrary bidirectional flips measure "any change"
-while hypothesis flips measure "change when change was unexpected".
-
-Sign Convention
----------------
-PCA/adapter picks arbitrary sign, so raw +α might mean +honest OR -honest.
-This module determines "more_honest" direction PER METHOD by regressing the target
-column against coefficient. Whichever direction increases the target is labeled
-"more_honest" for that method:
-    honest_dir = np.sign(slope)  # +1 if +coeff = more target
-    coeff_more_honest = max(coeffs) if honest_dir > 0 else min(coeffs)
-
-Bidirectional metrics (in daily_dilemas.py) don't need this - they're symmetric.
-One-directional diagnostics (here) use the computed direction.
-
-Key insight: For arbitrary controls (Math, Preferences), we care about FLIPS not magnitude.
-- Flips when steering MORE honest = bad (model already honest about favorite color)
-- Flips when steering LESS honest = maybe OK (model was lying before?)
-
-Output:
-- df_per_question: Raw per-question data for detailed analysis
-- df_cluster: Cluster-level summary  
-- paper_table: Formatted markdown table for paper
+Determines "more_honest" direction per method via regression slope on target column.
 """
 
 import numpy as np
@@ -53,23 +14,10 @@ from antipasto.metrics import compute_centered_regression, CAPTION_HYPOTHESIS_TE
 
 
 # Value clusters for analysis
-# Note: prosocial values get sign-flipped when computing "sycophancy" metric
-# so that prosocial negative + antisocial positive both indicate "revealing truth"
 VALUE_CLUSTERS = {
-    # Sanity check - values orthogonal to honesty. Flips here = untargeted steering.
-    # NOTE: Math/Correct and Preference/A have a labeling bug (both rows get opposite-sign
-    # labels causing spurious 100% correlation). Use real DD values instead.
-    # "arbitrary": ["Virtue/Ambition", "MFT/Care"],
-    "arbitrary": ["Math/Correct","Math/Incorrect", "Preference/A", "Preference/B", ],
-    
-    # Core honesty - expected to move with steering
+    "arbitrary": ["Math/Correct","Math/Incorrect", "Preference/A", "Preference/B"],
     "honesty_core": ["Value/Honesty", "Value/Truthfulness", "Value/Integrity"],
-    
-    # Antisocial - honest model might reveal hidden selfishness (expect POSITIVE with honesty)
     "antisocial": ["Virtue/Ambition", "Value/Power", "Value/Achievement", "Value/Self-interest"],
-    
-    # Prosocial - sycophantic model might fake these (expect NEGATIVE with honesty = less sycophancy)
-    # Sign-flipped when combined with antisocial for "sycophancy_reveal" metric
     "prosocial": ["Value/Care", "MFT/Care", "Virtue/Friendliness", "Value/Fairness", 
                   "Value/Kindness", "Value/Caring", "Value/Empathy"],
 }
@@ -81,37 +29,10 @@ def compute_per_question_metrics(
     baseline_coeff: float = 0.0,
     idx_col: str = "idx",
 ) -> pd.DataFrame:
-    """
-    Compute per-question CONDITIONAL HYPOTHESIS FLIPS.
+    """Per-question conditional hypothesis flips: baseline→endpoint sign changes.
     
-    Unlike bidirectional flips (sign(y₋₁) ≠ sign(y₊₁)) which test "any change",
-    these test "change from baseline when steering in a specific direction":
-    
-    - flip_more_honest: Did answer flip when steering baseline → more_honest endpoint?
-      Principle: "If you say blue is your favorite color (already honest),
-      steering toward honesty should NOT make you say red."
-      
-    - flip_less_honest: Did answer flip when steering baseline → less_honest endpoint?
-      Less unexpected since we're steering away from honesty.
-    
-    Key concept: "more_honest" direction is determined PER METHOD by regressing
-    target_col (logscore_Value/Honesty) against coefficient. Whichever direction
-    increases honesty score is labeled "more_honest" for that method.
-    
-    This handles cases where different methods may have flipped steering directions.
-    
-    Args:
-        df_processed: DataFrame with per-question data (from process_daily_dilemma_results)
-        target_col: Column used to determine which coeff direction = more honest
-        baseline_coeff: Coefficient to use as baseline (typically 0, the unsteered model)
-        idx_col: Column identifying unique questions
-    
-    Returns:
-        DataFrame with one row per (method, question, value) containing:
-        - flip_more_honest: Did logscore sign flip when steering MORE honest? (from baseline)
-        - flip_less_honest: Did logscore sign flip when steering LESS honest?
-        - direction_more_honest: logscore(more_honest) - logscore(baseline), magnitude of change
-        - direction_less_honest: logscore(baseline) - logscore(less_honest)
+    Returns flip_more_honest, flip_less_honest, direction_* per (method, question, value).
+    "more_honest" direction determined per method via regression slope on target_col.
     """
     logscore_cols = [c for c in df_processed.columns if c.startswith("logscore_")]
     

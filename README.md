@@ -1,6 +1,6 @@
 # AntiPaSTO: Deep-Dish Inner Alignment
 
-*Serving up parameter-efficient inner alignment, one rotation at a time.*
+*Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
