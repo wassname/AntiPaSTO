@@ -8,7 +8,7 @@
 
 ```sh
 uv sync --all-groups
-uv run python nbs/train.py tiny --quick  # taste test
+uv run python nbs/train.py tiny --quick  # taste test, should give ` Final val loss **-1.37** (negative ✓).`
 uv run python nbs/train.py               # full course (gemma-3-1b-it)
 ```
 
