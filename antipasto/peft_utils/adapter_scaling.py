@@ -4,7 +4,7 @@ Adapter steering for contrastive training with proper gradient flow.
 For AntiPaSTO: Sets `antipasto_alpha` directly on each layer. The Cayley rotation
 transform satisfies R(-α) = R(α)^(-1), so a single adapter handles both steering directions.
 
-Key insight: PyTorch's autograd tracks tensor references in the computation graph,
+PyTorch's autograd tracks tensor references in the computation graph,
 not module attributes. So we can:
 1. Replace `module.weight` with `weight * coeff` (graph stores ref to original param)
 2. Run forward pass

@@ -1968,7 +1968,6 @@ def train_model(config: TrainingConfig):
                 f"Results for method: {method} [logratio * label -> nat's toward label]\n{df_res_pv[method].head(5).round(4)}\n"
             )
 
-    # Generate comprehensive metrics (both text and markdown)
     md_table, tables_dict, main_score = format_main_results_table(
         df_res_wlabels,  config=config
     )
