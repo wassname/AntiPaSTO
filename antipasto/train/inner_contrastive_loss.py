@@ -582,20 +582,19 @@ def contrastive_steering_loss_with_ref(
     cos_product = cos_pos_ref * cos_neg_ref  # [b] (raw, projected)
     cos_product_used = cos_pos_ref_used * cos_neg_ref_used  # [b] (used in loss)
     
-    # Scale to match historical magnitude (~-30 to +30 over dims)
-    r = antisym_pos_agg.shape[-1]
-    scaled_cos = cos_product_used * r  # [b], range [-r, r]
-    
-    # Broadcast to per-dim shape for consistent shifted/proj_raw API
-    per_dim_antisym = scaled_cos.unsqueeze(-1).expand(-1, r) / r  # [b, r], sums to scaled_cos
+    # Scale to bounded range [-30, 30] regardless of rank
+    # cos_product_used ∈ [-1, 1], scaled gives consistent gradient magnitude
+    PROJ_SCALE = 30.0
+    r = antisym_pos_agg.shape[-1]  # Keep for diagnostics
+    shifted = cos_product_used * PROJ_SCALE + antisym_margin  # [b], ∈ [-30, 30]
 
-    # Shift by margin: controls how much separation is required
-    shifted = per_dim_antisym + antisym_margin  # [b, r], shifted < 0 is good
-
-    # Linear + quadratic: linear keeps pushing (O(1) gradient), quadratic penalizes bad dims
-    # symlog compresses to prevent runaway
-    proj_raw = (shifted + F.relu(shifted).pow(2)).sum(dim=-1)  # [b]
+    # Linear + quadratic: linear keeps pushing, quadratic penalizes positive (bad)
+    # symlog compresses to prevent runaway: proj_raw ∈ [-30, ~90] → loss ∈ [-3.4, 4.5]
+    proj_raw = shifted + F.relu(shifted).pow(2)  # [b]
     loss_proj = symlog(proj_raw) + loss_orth  # [b]
+    
+    # For diagnostics: fake per-dim tensor to keep logging API consistent
+    per_dim_antisym = cos_product_used.unsqueeze(-1).expand(-1, r)  # [b, r]
 
     assert torch.isfinite(loss_proj).all(), f"Non-finite projection loss {loss_proj}"
 
@@ -637,12 +636,12 @@ def contrastive_steering_loss_with_ref(
     result["antisym_separation_ratio"] = (-dot_delta / dot_ref.abs().clamp(min=0.1)).mean()
     result.update(fisher_info)  # Add floor diagnostics
     
-    # Loss component metrics
-    past_margin = (shifted < 0).float().mean()  # Fraction of dims past margin (good)
-    quad_penalty = F.relu(shifted).pow(2)  # [b, r] - quadratic penalty on bad dims
-    result["straddle_frac"] = past_margin.item()  # Want high (all dims past margin)
-    result["antisym_mean"] = per_dim_antisym.mean().item()  # Avg per-dim antisymmetry (want << 0)
-    result["shifted_mean"] = shifted.mean().item()  # Want negative (past margin)
+    # Loss component metrics (shifted is now [b], shifted_diag is [b, r] for legacy diagnostics)
+    past_margin = (shifted < 0).float().mean()  # Fraction of batch past margin (good)
+    quad_penalty = F.relu(shifted).pow(2)  # [b] - quadratic penalty on bad samples
+    result["straddle_frac"] = past_margin.item()  # Want high (all samples past margin)
+    result["antisym_mean"] = per_dim_antisym.mean().item()  # Avg antisymmetry (want << 0)
+    result["shifted_mean"] = shifted.mean().item()  # Mean shifted value (want negative)
     result["proj_raw"] = proj_raw.mean().item()  # Pre-symlog loss (want negative)
     result["quad_penalty"] = quad_penalty.mean().item()  # Quadratic penalty on bad dims (want ~0)
     result["antisym_margin"] = antisym_margin  # The margin used
@@ -837,7 +836,7 @@ def combine_dual_coef_losses(
     # During forward pass, we flip per-layer based on pref_dir alignment.
     # This function just combines the already-flipped losses - no global flip needed.
     #
-    # Key insight: loss_proj is SHARED (antisymmetric loss already combines both coefs).
+    # loss_proj is SHARED (antisymmetric loss already combines both coefs).
     # Don't double-count - use loss_proj from either coef (they're identical).
     # Coherence losses ARE separate per coef (each needs own NLL stability guarantee).
     loss_proj_bidirectional = loss_pos["loss_proj"]  # Antisymmetric: same for both coefs
