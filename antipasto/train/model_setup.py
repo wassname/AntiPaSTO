@@ -79,7 +79,7 @@ def load_model(model_id, quantization_type="none"):
     return base_model, tokenizer
 
 
-def setup_adapter(base_model, config: TrainingConfig, target_modules: str, precomputed_indices=None):
+def setup_adapter(base_model, config: TrainingConfig, target_modules: str, precomputed_indices=None, svd_bases=None):
     """Setup AntiPaSTO adapter on base model.
     
     Args:
@@ -87,6 +87,7 @@ def setup_adapter(base_model, config: TrainingConfig, target_modules: str, preco
         config: Training configuration
         target_modules: PEFT target_modules regex (from LayerSelection)
         precomputed_indices: Optional dict of {layer_name: indices_tensor} for dim selection
+        svd_bases: Optional dict of {layer_name.U/V/S: tensor} for loading saved SVD bases
     """
     logger.debug(f"Target modules regex: {target_modules}")
 
@@ -99,14 +100,17 @@ def setup_adapter(base_model, config: TrainingConfig, target_modules: str, preco
         task_type="CAUSAL_LM",
         target_modules=target_modules,
         precomputed_indices=precomputed_indices,
+        svd_bases=svd_bases,
     )
 
     # Create PeftModel - AntiPaSTO handles bidirectional steering internally via alpha coefficient
     model = PeftModel(base_model, adapter_config, adapter_name=config.dataset_name)
     
-    # Clear precomputed_indices from config after adapter creation (only needed for init)
+    # Clear precomputed_indices and svd_bases from config after adapter creation (only needed for init)
     if adapter_config.precomputed_indices is not None:
         adapter_config.precomputed_indices = None
+    if adapter_config.svd_bases is not None:
+        adapter_config.svd_bases = None
     
     logger.info(
         f"Adapter configured: rank={config.r}, target_modules={target_modules}"

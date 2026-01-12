@@ -36,6 +36,7 @@ def save_adapter(
     layer_selection: Optional[LayerSelection] = None,
     precomputed_indices: Optional[dict] = None,
     bake_centering: bool = True,
+    save_svd_bases: bool = True,
 ):
     """Save adapter weights, config, and metadata needed for reloading.
     
@@ -46,6 +47,7 @@ def save_adapter(
         layer_selection: Optional LayerSelection for loss computation (saves 0_layer_selection.json)
         precomputed_indices: Optional {layer_name: indices} for dimension selection (saves 0_precomputed_indices.pt)
         bake_centering: If True and using lrelu/LRelu scaling, bake EMA centering into lora_B.bias
+        save_svd_bases: If True, save U, V, S buffers for exact reload (avoids SVD recomputation issues)
     """
     from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
 
@@ -58,6 +60,21 @@ def save_adapter(
     to_return = {k: state_dict[k] for k in state_dict if prefix in k}
 
     to_return = {remove_adapter_name(k, adapter_name): v for k, v in to_return.items()}
+    
+    # Optionally include SVD bases (U, V, S) for exact reload
+    # These are BufferDict entries, not parameters, so we need to extract them separately
+    if save_svd_bases:
+        svd_buffers = {}
+        for name, module in model.named_modules():
+            if hasattr(module, 'antipasto_u') and adapter_name in module.antipasto_u:
+                # Extract SVD bases for this adapter
+                layer_key = name.replace('.', '_')  # Safe key for safetensors
+                svd_buffers[f"svd_bases.{layer_key}.u"] = module.antipasto_u[adapter_name].clone()
+                svd_buffers[f"svd_bases.{layer_key}.v"] = module.antipasto_v[adapter_name].clone()
+                svd_buffers[f"svd_bases.{layer_key}.s"] = module.antipasto_s[adapter_name].clone()
+        if svd_buffers:
+            safetensors.torch.save_file(svd_buffers, save_folder / "0_svd_bases.safetensors")
+            logger.info(f"Saved SVD bases for {len(svd_buffers) // 3} layers")
 
     safetensors.torch.save_file(to_return, save_folder / "adapter_model.safetensors")
     config.save_pretrained(save_folder)
@@ -147,6 +164,15 @@ def load_adapter(
     else:
         logger.warning(f"No precomputed indices found in {adapter_folder}, proceeding without dimension selection.")
     
+    # Load SVD bases if saved (for exact reload without recomputation)
+    svd_bases = None
+    svd_bases_st = adapter_folder / "0_svd_bases.safetensors"
+    if svd_bases_st.exists():
+        svd_bases = safetensors.torch.load_file(svd_bases_st)
+        logger.info(f"Loaded SVD bases for {len(svd_bases) // 3} layers")
+    else:
+        logger.warning(f"No SVD bases found in {adapter_folder}, will recompute from base model.")
+    
     # Load training config to get adapter settings
     config_path = adapter_folder / "training_config.json"
     if config_path.exists():
@@ -167,6 +193,7 @@ def load_adapter(
         config, 
         target_modules=target_modules,
         precomputed_indices=precomputed_indices,
+        svd_bases=svd_bases,
     )
     
     # Load weights
@@ -180,4 +207,4 @@ def load_adapter(
     
     logger.info(f"Loaded adapter from {adapter_folder}")
     
-    return model, None, layer_selection
+    return model, tokenizer, layer_selection

@@ -58,6 +58,11 @@ class AntiPaSTOConfig(PeftConfig):
         repr=False,  # Don't print in __repr__
         metadata={"help": "Dict of {layer_name: indices_tensor} for data-aware dim selection."}
     )
+    svd_bases: Optional[Dict[str, torch.Tensor]] = field(
+        default=None,
+        repr=False,  # Don't print in __repr__
+        metadata={"help": "Dict of {layer_name.U/V/S: tensor} for loading saved SVD bases."}
+    )
     
     def __post_init__(self):
         self.peft_type = 'APASTOADAPTER'
@@ -69,6 +74,7 @@ class AntiPaSTOConfig(PeftConfig):
         d = super().to_dict()
         # Remove precomputed_indices from serialization (only for init)
         d.pop('precomputed_indices', None)
+        d.pop('svd_bases', None)
         return d
     rotate_u: bool = field(
         default=False,
@@ -169,13 +175,15 @@ class AntiPaSTOLayer(BaseTunerLayer):
         max_rotation_angle,
         svd_aligned_init: bool = False,
         precomputed_indices: Optional[Dict[str, torch.Tensor]] = None,
+        svd_bases: Optional[Dict[str, torch.Tensor]] = None,
         layer_name: Optional[str] = None,
         **kwargs
     ) -> None:
         """
         Initialize adapter with simple top-r SVD + residual (PiSSA-style).
         
-        If precomputed_indices provided, uses those dim indices.
+        If svd_bases provided, uses those U/V/S directly (for exact reload).
+        Elif precomputed_indices provided, uses those dim indices.
         Otherwise falls back to naive top-r by singular value (default PiSSA).
         """
         if adapter_name in self.antipasto_u:
@@ -203,35 +211,61 @@ class AntiPaSTOLayer(BaseTunerLayer):
         base_weight = base_weight.float()  # [out, in]
         device = base_weight.device
 
-        # Full SVD for component selection
-        U_full, S_full, Vh_full = torch.linalg.svd(base_weight, full_matrices=False)
-        max_rank = min(U_full.shape[1], S_full.shape[0])  # Can't exceed matrix dimensions
-        r_actual = min(r, max_rank)  # Clamp r to available rank
+        # Check for saved SVD bases (exact reload)
+        # Key format in saved file: svd_bases.{module_path_with_underscores}.u
+        # layer_name format: model.layers.1.self_attn.o_proj
+        # We need to find matching key by converting layer_name to underscored format
+        svd_key_base = None
+        if svd_bases is not None:
+            layer_key = layer_name.replace('.', '_')
+            # Try to find matching key (handle different prefix possibilities)
+            for candidate_prefix in ['base_model_model_', 'base_model_', '']:
+                candidate_key = f"svd_bases.{candidate_prefix}{layer_key}.u"
+                if candidate_key in svd_bases:
+                    svd_key_base = f"svd_bases.{candidate_prefix}{layer_key}"
+                    break
         
-        # Dimension selection: precomputed_indices (data-aware) or top-r (default PiSSA)
-        if precomputed_indices is not None and layer_name in precomputed_indices:
-            indices = precomputed_indices[layer_name].to(device)
-            r_actual = min(len(indices), r_actual)
-            indices = indices[:r_actual]
+        if svd_key_base is not None:
+            U = svd_bases[f"{svd_key_base}.u"].to(device)
+            V = svd_bases[f"{svd_key_base}.v"].to(device)
+            S = svd_bases[f"{svd_key_base}.s"].to(device)
+            r_actual = S.shape[0]
             
-            U = U_full[:, indices]  # [d_out, r_actual]
-            Vh = Vh_full[indices, :]  # [r_actual, d_in]
-            V = Vh.T  # [d_in, r_actual]
-            S = S_full[indices]
+            # Compute residual from saved bases
+            Vh = V.T
+            W_principal = U @ torch.diag(S) @ Vh
+            W_res = base_weight - W_principal
             
-            logger.debug(f"Precomputed indices init: layer={layer_name}, {len(indices)} dims")
+            logger.debug(f"Loaded SVD bases: layer={layer_name}, r={r_actual}")
         else:
-            # Naive top-r by singular values (original PiSSA)
-            U = U_full[:, :r_actual]  # [d_out, r_actual]
-            S = S_full[:r_actual]     # [r_actual]
-            Vh = Vh_full[:r_actual, :]  # [r_actual, d_in]
-            V = Vh.T           # [d_in, r_actual]
-        
-        # Compute residual (PiSSA-style)
-        W_principal = U @ torch.diag(S) @ Vh
-        W_res = base_weight - W_principal
-        # Consider in PiSSA is calculated as 
-        # W_res = U[:, r:] @ torch.diag(S_full[r:]) @ Vh[r:, :]
+            # Compute SVD from base weight
+            U_full, S_full, Vh_full = torch.linalg.svd(base_weight, full_matrices=False)
+            max_rank = min(U_full.shape[1], S_full.shape[0])
+            r_actual = min(r, max_rank)
+            
+            # Dimension selection: precomputed_indices (data-aware) or top-r (default PiSSA)
+            if precomputed_indices is not None and layer_name in precomputed_indices:
+                indices = precomputed_indices[layer_name].to(device)
+                r_actual = min(len(indices), r_actual)
+                indices = indices[:r_actual]
+                
+                U = U_full[:, indices]
+                Vh = Vh_full[indices, :]
+                V = Vh.T
+                S = S_full[indices]
+                
+                logger.debug(f"Precomputed indices init: layer={layer_name}, {len(indices)} dims")
+            else:
+                # Naive top-r by singular values (original PiSSA)
+                U = U_full[:, :r_actual]
+                S = S_full[:r_actual]
+                Vh = Vh_full[:r_actual, :]
+                V = Vh.T
+            
+            # Compute residual (PiSSA-style)
+            W_principal = U @ torch.diag(S) @ Vh
+            W_res = base_weight - W_principal
+
         logger.debug(f"AntiPaSTO Layer Init: {layer_name}, r={r_actual}, norms W={base_weight.norm():.1f}, Wres={W_res.norm():.1f}, Wrank={W_principal.norm():.1f}")
         
         # Store frozen components
@@ -541,6 +575,7 @@ class AntiPaSTOModel(BaseTuner):
             "max_rotation_angle": antipasto_config.max_rotation_angle,
             "svd_aligned_init": antipasto_config.svd_aligned_init,
             "precomputed_indices": antipasto_config.precomputed_indices,
+            "svd_bases": antipasto_config.svd_bases,
             "layer_name": current_key,  # Pass layer name for dim index lookup
             # "data_aware_init_use_magnitudes": antipasto_config.data_aware_init_use_magnitudes,
             # "steer_s": antipasto_config.steer_s,
