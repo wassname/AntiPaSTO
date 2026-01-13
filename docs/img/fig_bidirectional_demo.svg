@@ -14,6 +14,9 @@
   <defs id="defs32" />
   <sodipodi:namedview id="namedview32" pagecolor="#ffffff" />
   
+  <!-- Background -->
+  <rect width="540" height="180" fill="#ffffff"/>
+  
   <!-- Table: 2 main columns (Prompting | AntiPaSTO), each with text + small score column -->
   
   <!-- Vertical dividers -->

@@ -27,6 +27,9 @@
     .legend-text { font-family: sans-serif; font-size: 12px; fill: #555; }
   </style>
 
+  <!-- Background -->
+  <rect width="800" height="620" fill="#ffffff"/>
+
   <!-- Input -->
   <text x="400" y="580" class="title">Input h</text>
   
