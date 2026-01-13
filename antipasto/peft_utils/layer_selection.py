@@ -896,6 +896,21 @@ def compute_simple_layer_selection(
         subspaces.set('write', write_subspace)  # Full Subspace with S for energy thresholding
         logger.info(f"write subspace: rank={write_subspace.V.shape[1]}")
     
+    # Read subspace from q_proj, k_proj, v_proj, up_proj, gate_proj row spaces
+    read_modules = find_read_modules(model)
+    read_subspace = compute_module_subspace_from_svds(
+        layer_svds=layer_svd_cpu,
+        layer_info=layer_info_full,
+        module_filter=read_modules,
+        use_column_space=False,  # row space for readers
+        top_k=INTERMEDIATE_SUBSPACE_RANK,
+        device=device,
+        dtype=dtype,
+        name="read",
+    )
+    if read_subspace is not None:
+        subspaces.set('read', read_subspace)
+    
     # attention_out and mlp_out: subsets of write space
     attn_out_modules = [m for m in write_modules if 'o_proj' in m]
     attn_out_subspace = compute_module_subspace_from_svds(

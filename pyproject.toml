@@ -8,60 +8,54 @@ license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    # Core ML
     "numpy>=1.26.4",
-    "scikit-learn>=1.4.0",
     "torch>=2.1.2",
     "transformers[torch]>4.51.0",
-    "bitsandbytes>=0.47.0",
-    "tqdm>=4.66.1",
-    "gguf>=0.13.0",
-    "baukit",
-    "jaxtyping>=0.3.2",
-    "anycache>=2.4.0",
     "peft",
+    "bitsandbytes>=0.47.0",
+    "einops>=0.8.1",
+    "jaxtyping>=0.3.2",
+    # Data/utils
     "datasets>=4.1.1",
     "pandas>=2.3.2",
-    "einops>=0.8.1",
-    "matplotlib>=3.10.6",
-    "simple-parsing>=0.1.7",
-    "great-tables>=0.20.0",
-    "adjusttext>=1.3.0",
-    "repeng>=0.4.0",
-    "colorama>=0.4.6",
-    "nbformat>=5.10.4",
-    "seaborn>=0.13.2",
-    "torchjd>=0.8.0",
-    "jupytext>=1.18.1",
-    "plotly>=6.5.0",
-    "polars>=1.36.1",
+    "tqdm>=4.66.1",
+    "loguru>=0.7.3",
+    # Model internals
+    "baukit",
+    "scikit-learn>=1.4.0",
+    "scipy>=1.11.0",
+    # Export
+    "gguf>=0.13.0",
+    "safetensors>=0.4.0",
 ]
 
 [dependency-groups]
 dev = [
-    "attrs>=25.4.0",
-    "cattrs>=25.3.0",
-    "ipykernel>=6.30.1",
-    "ipywidgets>=8.1.7",
-    "loguru>=0.7.3",
     "pytest>=8.0.2",
     "ruff>=0.8.3",
-    "tabulate>=0.9.0",
-    "tomli-w>=1.2.0",
-    "tyro>=0.9.35",
-    "wandb>=0.22.3",
-]
-nbs = [
-    "matplotlib>=3.10.6",
-    "pandas>=2.3.2",
-    "umap-learn>=0.5.9.post2",
-    "jaxtyping>=0.3.2",
     "ipykernel>=6.30.1",
     "ipywidgets>=8.1.7",
-    "bitsandbytes>=0.47.0",
+]
+nbs = [
+    # Visualization
+    "matplotlib>=3.10.6",
+    "seaborn>=0.13.2",
+    "plotly>=6.5.0",
+    "great-tables>=0.20.0",
+    "adjusttext>=1.3.0",
+    # Experiment tracking
+    "wandb>=0.22.3",
+    # Notebook utils
+    "ipykernel>=6.30.1",
+    "ipywidgets>=8.1.7",
+    "jupytext>=1.18.1",
+    "nbformat>=5.10.4",
     "tabulate>=0.9.0",
-    "peft>=0.17.1",
-    "datasets>=4.1.1",
-    "einops>=0.8.1",
+    # Baselines
+    "repeng>=0.4.0",
+    # Analysis
+    "umap-learn>=0.5.9.post2",
 ]
 
 [tool.ruff.lint]
@@ -75,7 +69,6 @@ markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 
 [tool.uv.sources]
 baukit = { git = "https://github.com/davidbau/baukit.git" }
-# peft = { git = "https://github.com/mwbini/peft.git", branch = "add-delora" }
 peft = { git = "https://github.com/huggingface/peft.git", rev = "41091ecd31abc84bda9e899c4e80ec96f3fa99b2" }
 repeng = { git = "https://github.com/wassname/repeng.git", branch="my_fixes" }
 
