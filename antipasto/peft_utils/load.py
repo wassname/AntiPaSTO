@@ -5,7 +5,7 @@ import safetensors.torch
 import torch
 import json
 from loguru import logger
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from antipasto.peft_utils.layer_selection import LayerSelection
 
@@ -33,6 +33,7 @@ def save_adapter(
     model: PeftModel, 
     save_folder: Path, 
     adapter_name: str,
+    model_id: str = None,
     layer_selection: Optional[LayerSelection] = None,
     precomputed_indices: Optional[dict] = None,
     bake_centering: bool = True,
@@ -44,6 +45,7 @@ def save_adapter(
         model: PeftModel with trained adapter
         save_folder: Directory to save to
         adapter_name: Name of the adapter in PeftModel
+        model_id: HuggingFace model ID (stored in adapter_config.json for reload)
         layer_selection: Optional LayerSelection for loss computation (saves 0_layer_selection.json)
         precomputed_indices: Optional {layer_name: indices} for dimension selection (saves 0_precomputed_indices.pt)
         bake_centering: If True and using lrelu/LRelu scaling, bake EMA centering into lora_B.bias
@@ -54,6 +56,11 @@ def save_adapter(
     save_folder.mkdir(parents=True, exist_ok=True)
 
     config = model.peft_config[adapter_name]
+    
+    # Set base_model_name_or_path for standard PEFT compatibility
+    if model_id is not None:
+        config.base_model_name_or_path = model_id
+    
     state_dict = model.state_dict()
 
     prefix = PEFT_TYPE_TO_PREFIX_MAPPING[config.peft_type]
