@@ -145,19 +145,24 @@ def compute_loss_subspace_basis(
     Returns:
         L_subspace: [d_model, top_k] tensor
     
-    Note: Many loss_subspace options were removed in Jan 2026 cleanup.
-    Only taskdiff_x_suppressed_x_write, write, taskdiff are supported.
-    See git history for steer*, null, notlogits, weight_svd implementations.
+    Supported loss_subspace options:
+    - taskdiff_x_suppressed_x_write (default): empirical stenographic + writable
+    - taskdiff_x_logits_read: task signal that affects lm_head output
+    - taskdiff_x_write_not_read: task signal in static write-not-read space  
+    - taskdiff_x_write_x_notlogits: task ∩ write ∩ (lm_head^⊥)
+    - write, taskdiff: basic building blocks
     """
     top_k = config.loss_subspace_rank  # None means auto by energy
     
     # Get from cache - SubspaceCache now stores Subspace objects
     L_cached_sub = subspaces.get(config.loss_subspace)
     if L_cached_sub is None:
+        available = list(subspaces._subspaces.keys())
         raise ValueError(
             f"Subspace '{config.loss_subspace}' not found in cache. "
-            f"Available: {list(subspaces._subspaces.keys())}. "
-            f"Valid options: taskdiff_x_suppressed_x_write, write, taskdiff"
+            f"Available: {available}. "
+            f"Valid options: taskdiff_x_suppressed_x_write, taskdiff_x_logits_read, "
+            f"taskdiff_x_write_not_read, taskdiff_x_write_x_notlogits, write, taskdiff"
         )
     
     L_cached = L_cached_sub.V

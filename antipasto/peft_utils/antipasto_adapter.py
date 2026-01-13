@@ -339,11 +339,6 @@ class AntiPaSTOLayer(BaseTunerLayer):
         """
         # Soft clamp rotation angle: small θ ensures R(θ)@S ≈ -R(-θ)@S (first-order approx)
         # This gives additive output symmetry: Δy(+1) ≈ -Δy(-1) around base model
-
-        # if max_angle is not None and max_angle < float('inf'):
-        #     A_clamped = max_angle * torch.tanh(A / max_angle)
-        # else:
-        #     A_clamped = A
         
         if max_angle is not None and max_angle < (torch.pi - 1e-6):
             # Convert desired max rotation angle to A-space limit
@@ -446,7 +441,7 @@ class AntiPaSTOLayer(BaseTunerLayer):
         if not torch.isfinite(U_rot).all():
             raise ValueError(f"NaNs in U_rot for adapter {adapter}. alpha={alpha}, max_angle={max_angle}")
         if not torch.isfinite(S_scaled).all():
-            raise ValueError(f"NaNs in S_scaled for adapter {adapter}. scale_mode={scale_mode}")
+            raise ValueError(f"NaNs in S_scaled for adapter {adapter}.")
 
         # Efficient forward: x @ V_rot @ diag(S_scaled) @ U_rot^T
         x_projected = x @ V_rot  # [..., r]

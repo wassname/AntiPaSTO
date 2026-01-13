@@ -149,7 +149,11 @@ class TrainingConfig:
 
     loss_subspace: Literal[
         # Recommended (default)
-        "taskdiff_x_suppressed_x_write",  # Task-discriminative ∩ suppressed ∩ write
+        "taskdiff_x_suppressed_x_write",  # Task-discriminative ∩ suppressed ∩ write (empirical)
+        # Static alternatives (model-intrinsic, not task-specific base)
+        "taskdiff_x_logits_read",  # Task signal that AFFECTS output (opposite of suppressed)
+        "taskdiff_x_write_not_read",  # Task signal in static write-not-read space
+        "taskdiff_x_write_x_notlogits",  # Task ∩ write ∩ (lm_head^⊥) 
         # Simpler alternatives
         "write",  # Write space only (o_proj, down_proj column space)
         "taskdiff",  # Task-discriminative PCA only
@@ -158,8 +162,13 @@ class TrainingConfig:
     
     Default: taskdiff_x_suppressed_x_write = intersection of:
     - taskdiff: PCA on cho-rej difference (task-discriminative directions)
-    - suppressed: Written to residual but erased by later layers  
+    - suppressed: Written to residual but erased by later layers (EMPIRICAL)
     - write: Column space of o_proj and down_proj (writable by model)
+    
+    Alternative static (model-intrinsic) options:
+    - taskdiff_x_logits_read: Task signal readable by lm_head (affects output)
+    - taskdiff_x_write_not_read: Task signal in static write-not-read space
+    - taskdiff_x_write_x_notlogits: Task ∩ write ∩ (lm_head^⊥)
     """
 
     loss_subspace_rank: Optional[int] = 8
