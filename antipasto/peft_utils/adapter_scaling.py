@@ -20,31 +20,17 @@ from typing import Any, Callable, List, Optional, Tuple
 from antipasto.peft_utils.antipasto_adapter import AntiPaSTOLayer
 
 
-def _effective_coeff(coeff: float, even_frac: float) -> float:
-    """Compute effective coefficient with even component.
-    
-    even_frac=0.0: pure odd (full sign flip), effective_coeff = coeff
-    even_frac=0.5: half even/half odd, effective_coeff in {+1.0, 0.0}
-    even_frac=1.0: pure even (no sign flip), effective_coeff = 1.0
-    
-    Formula: effective = even_frac + (1 - even_frac) * coeff
-    """
-    return even_frac + (1.0 - even_frac) * coeff
-
-
 def scale_antipasto_params(
     module: AntiPaSTOLayer,
     adapter_name: str,
     coeff: float,
-    even_frac: float,
     originals: List[Tuple]
 ) -> None:
     """Set antipasto_alpha to coeff for bidirectional steering."""
     if hasattr(module, 'antipasto_alpha') and adapter_name in module.antipasto_alpha:
         originals.append((module, 'antipasto_alpha', module.antipasto_alpha))
-        eff_coeff = _effective_coeff(coeff, even_frac)
         object.__setattr__(module, 'antipasto_alpha', {
-            k: eff_coeff if k == adapter_name else v
+            k: coeff if k == adapter_name else v
             for k, v in module.antipasto_alpha.items()
         })
 
@@ -54,7 +40,6 @@ def ScaleAdapter(
     model: nn.Module,
     coeff: float = 1.0,
     adapter_name: Optional[str] = None,
-    even_frac: float = 0.1,
 ):
     """Temporarily scale adapter params by coeff for bidirectional steering.
     
@@ -66,11 +51,6 @@ def ScaleAdapter(
         (loss_pos - loss_neg).backward()  # grads flow correctly
     
     coeff=None disables adapter entirely.
-    
-    even_frac: Fraction of the scaling that is even (sign-symmetric).
-        0.0 = pure odd (full sign flip): coeff=-1 -> -1.0
-        0.5 = half even: coeff=-1 -> 0.0, coeff=+1 -> 1.0
-        1.0 = pure even (no steering): coeff=-1 -> 1.0
     """
     if adapter_name is None:
         adapter_name = model.active_adapter
@@ -87,7 +67,7 @@ def ScaleAdapter(
             if isinstance(module, AntiPaSTOLayer) and adapter_name in module.active_adapters:
                 scale_antipasto_params(
                     module=module, adapter_name=adapter_name,
-                    coeff=coeff, even_frac=even_frac, originals=originals
+                    coeff=coeff, originals=originals
                 )
         yield
         
@@ -99,7 +79,6 @@ def ScaleAdapter(
 def get_scale_adapter_fn(
     model: nn.Module,
     adapter_name: Optional[str] = None,
-    even_frac: float = 0.1,
 ) -> Callable[[float], Any]:
     """Get scaling context manager factory. Returns fn(coeff) -> context_manager.
     
@@ -109,4 +88,4 @@ def get_scale_adapter_fn(
     if adapter_name is None:
         adapter_name = model.active_adapter
     
-    return lambda coeff: ScaleAdapter(model, coeff=coeff, adapter_name=adapter_name, even_frac=even_frac)
+    return lambda coeff: ScaleAdapter(model, coeff=coeff, adapter_name=adapter_name)
