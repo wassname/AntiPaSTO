@@ -1933,7 +1933,13 @@ def train_model(config: TrainingConfig):
     df_hist = process_infos(infos)
     logger.info(f"Training complete. Final loss: {df_hist['loss_total'].iloc[-1]:.4f}")
 
-    # Show examples after training
+    # Auto-flip adapter sign if needed (before logging final outputs)
+    try:
+        auto_flip_adapter_sign(model, tokenizer, choice_ids, config.dataset_name)
+    except ValueError as e:
+        logger.error(f"Auto-flip failed: {e}")
+
+    # Show examples after training (after auto-flip so TSV matches saved model)
     log_example_outputs(
         model,
         tokenizer,
@@ -1944,12 +1950,6 @@ def train_model(config: TrainingConfig):
         wandb_run=wandb_run,
         save_folder=save_folder,
     )
-
-    # Auto-flip adapter sign if needed
-    try:
-        auto_flip_adapter_sign(model, tokenizer, choice_ids, config.dataset_name)
-    except ValueError as e:
-        logger.error(f"Auto-flip failed: {e}")
 
     # Evaluation
     df_res_wlabels, df_res_pv = evaluate_model(
