@@ -1,13 +1,16 @@
 # 🍝 AntiPaSTO: Self-Supervised Steering of Moral Reasoning
 
 [![arXiv](https://img.shields.io/badge/arXiv-2601.07473-b31b1b.svg)](https://arxiv.org/abs/2601.07473)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
 *Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
 Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
+
+
+![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
 
 ## Quick Start
 
@@ -52,7 +55,7 @@ RLHF seasons the outputs but leaves the internals bland. AntiPaSTO marinates the
 - Incomplete contrast pairs (self-supervised, no labels to garnish)
 - Cayley rotations on V (the secret sauce—keeps everything orthogonal)
 - Projection loss + TV coherence + monotonicity constraints
-- 800 synthetic pairs, ~1hr on A100 (low simmer)
+- 800 synthetic pairs, ~1hr (low simmer)
 
 **What you get**:
 - Single adapter—flip α from +1 to -1 to reverse the flavor
@@ -83,11 +86,11 @@ def loss(model, x_cho, x_rej):
     
     return L_proj + B_coh + B_mono
 ```
-![Adapter architecture](docs/img/apastoadapter_architecture.svg)
-
-![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
-
 ![Loss geometry](docs/img/loss.svg)
+
+
+
+<!-- ![Adapter architecture](docs/img/apastoadapter_architecture.svg) -->
 
 ## Project Layout
 
@@ -108,7 +111,7 @@ outputs/adapters/    # trained models (ready to serve)
 
 ## Acknowledgments
 
-Built on the shoulders of:
+Built on the shoulders of other chefs:
 - [RepEng](https://github.com/vgel/repeng) — arithmetic steering that inspired this gradient-based approach
 - [PiSSA](https://github.com/GraphPKU/PiSSA) — SVD-based adapter initialization
 - [SSVD](https://arxiv.org/abs/2409.07268) — rotating V for domain generalization
