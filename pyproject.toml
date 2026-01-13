@@ -28,6 +28,8 @@ dependencies = [
     # Export
     "gguf>=0.13.0",
     "safetensors>=0.4.0",
+    "cattrs>=25.3.0",
+    "tyro>=1.0.5",
 ]
 
 [dependency-groups]
