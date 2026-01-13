@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
 """Centralized layer selection logic for AntiPaSTO training.
 
-FLOW OVERVIEW (v2.2+)
-=====================
-1. compute_simple_layer_selection() [RECOMMENDED]:
-   - Computes SVD for all linear layers (needed for adapter init anyway)
-   - Selects layers uniformly across valid depth range
-   - Uses top-r singular values for dimension selection (no gradient)
-   - Computes weight-only subspaces (write, write_x_notlogits)
-   - No backward pass = no OOM on large models (12B+)
+SIMPLIFIED FOR PUBLICATION (2026-01-13):
+Only 3 loss_subspace types are supported: taskdiff_x_suppressed_x_write (default), write, taskdiff.
+Deprecated gradient-based layer selection has been removed.
 
-2. compute_gradient_layer_selection() [DEPRECATED]:
-   - Expensive backward pass for gradient-based ranking
-   - Ablations show it doesn't improve over simple selection
-   - Kept for research/debugging purposes
+FLOW:
+1. compute_simple_layer_selection():
+   - Computes SVD for all linear layers (needed for adapter init)
+   - Selects layers uniformly across valid depth range
+   - Computes subspaces: write, taskdiff, taskdiff_x_suppressed_x_write
 
 Key functions:
-- compute_simple_layer_selection(): Uniform layer selection, top-S dims, weight-only subspaces
-- compute_gradient_layer_selection(): Gradient-based selection (deprecated, OOMs on 12B+)
+- compute_simple_layer_selection(): Main entry point for layer/subspace selection
 - find_linear_layers(): Discover all linear modules in model
 - resolve_target_modules(): Expand "residual-writers" etc. to concrete module lists
 
-Subspace operations (compute_write_subspace, compute_write_x_notlogits, etc.) 
-are in antipasto/peft_utils/subspaces.py
+Subspace operations are in antipasto/peft_utils/subspaces.py
 """
 import re
 import pandas as pd
@@ -41,23 +35,11 @@ from torch.utils.data import DataLoader, Subset
 from transformers import DataCollatorWithPadding
 import gc
 from antipasto.peft_utils.subspaces import (
-    compute_lm_head_subspace,
     compute_lm_head_svd,
     compute_suppressed_from_hidden_states,
-    compute_churn_from_hidden_states,
-    compute_churn_constructive_from_hidden_states,
-    compute_churn_suppressive_from_hidden_states,
     compute_task_diff_from_hidden_states,
-    compute_task_diff_constructive_from_hidden_states,
-    compute_task_read_subspace,
-    compute_task_lm_head_subspace,
-    compute_task_wnr_subspace,
     compute_module_subspace_from_svds,
-    compute_write_not_read_subspace,
     compute_stenographic_subspace,
-    compute_write_x_notlogits_subspace,
-    compute_logits_tail_subspace,
-    compute_taskdiff_x_write_x_notlogits_subspace,
     find_write_modules,
     find_read_modules,
     approx_intersection,
@@ -944,304 +926,46 @@ def compute_simple_layer_selection(
         S=lm_head_S_full[:INTERMEDIATE_SUBSPACE_RANK].to(device=device, dtype=dtype).detach(),
     )
     if lm_head_sub is not None:
-        subspaces.set('logits_read', lm_head_sub)  # Full Subspace with S
-    
-    # write_x_notlogits = write projected into notlogits (compound: needs full geometry)
-    if write_subspace is not None and lm_head_sub is not None:
-        hfl_sub = compute_write_x_notlogits_subspace(
-            write_subspace=write_subspace,
-            lm_head_subspace=lm_head_sub,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,  # Full geometry for subtraction
-        )
-        subspaces.set('write_x_notlogits', hfl_sub)  # Full Subspace
-        logger.info(f"write_x_notlogits subspace: rank={hfl_sub.V.shape[1]}")
-    
-    # Read subspace from read modules (q_proj, k_proj, etc.) row spaces
-    read_modules = find_read_modules(model)
-    read_subspace = compute_module_subspace_from_svds(
-        layer_svds=layer_svd_cpu,
-        layer_info=layer_info_full,
-        module_filter=read_modules,
-        use_column_space=False,  # Row space = read directions
-        top_k=INTERMEDIATE_SUBSPACE_RANK,
-        device=device,
-        dtype=dtype,
-        name="read",
-    )
-    if read_subspace is not None:
-        subspaces.set('read', read_subspace)  # Full Subspace
-        logger.info(f"read subspace: rank={read_subspace.V.shape[1]}")
-    
-    # NEW: Specific read subspaces (Query, Key, Value)
-    for name, suffix in [('query_read', 'q_proj'), ('key_read', 'k_proj'), ('value_read', 'v_proj')]:
-        modules = [m for m in read_modules if suffix in m]
-        if modules:
-            sub = compute_module_subspace_from_svds(
-                layer_svds=layer_svd_cpu,
-                layer_info=layer_info_full,
-                module_filter=modules,
-                use_column_space=False, # Row space
-                top_k=INTERMEDIATE_SUBSPACE_RANK,
-                device=device,
-                dtype=dtype,
-                name=name,
-            )
-            if sub is not None:
-                subspaces.set(name, sub)
-
-    # Attention Read (Union of Q, K, V)
-    attn_read_modules = [m for m in read_modules if any(s in m for s in ['q_proj', 'k_proj', 'v_proj'])]
-    if attn_read_modules:
-        attn_read_subspace = compute_module_subspace_from_svds(
-            layer_svds=layer_svd_cpu,
-            layer_info=layer_info_full,
-            module_filter=attn_read_modules,
-            use_column_space=False,  # Row space = read directions
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-            device=device,
-            dtype=dtype,
-            name="attn_read",
-        )
-        
-        # NEW: Attention Sink = Write - Attention_Read
-        if write_subspace is not None and attn_read_subspace is not None:
-            attn_sink = compute_write_not_read_subspace(
-                write_subspace=write_subspace,
-                read_subspace=attn_read_subspace,
-                lm_head_subspace=None, # Don't subtract lm_head for pure attention sink
-                top_k=INTERMEDIATE_SUBSPACE_RANK,
-            )
-            subspaces.set('attention_sink', attn_sink)
-            logger.info(f"attention_sink subspace: intermediate={attn_sink.V.shape[1]}, stored={top_k}")
-
-    # NEW: Communication Channel = Write & Read
-    if write_subspace is not None and read_subspace is not None:
-        comm_channel = approx_intersection(write_subspace, read_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('communication_channel', comm_channel)
-        logger.info(f"communication_channel subspace: intermediate={comm_channel.V.shape[1]}, stored={top_k}")
-
-    # write_not_read = write - read - lm_head (what's written but ignored)
-    if write_subspace is not None and read_subspace is not None:
-        wnr_sub = compute_write_not_read_subspace(
-            write_subspace=write_subspace,
-            read_subspace=read_subspace,
-            lm_head_subspace=lm_head_sub,  # Also subtract lm_head if available
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-        )
-        subspaces.set('write_not_read', wnr_sub)
-        logger.info(f"write_not_read subspace: intermediate={wnr_sub.V.shape[1]}, stored={top_k}")
+        subspaces.set('logits_read', lm_head_sub)
     
     # =========================================================================
-    # WANDA_X_LOGITS_NULL SUBSPACE
-    # =========================================================================
-    if loss_subspace == 'wanda_x_notlogits':
-        if hs_stacked is None:
-             raise ValueError("wanda_x_notlogits requires hidden states")
-        
-        logger.info("Computing wanda_x_notlogits subspace...")
-        # Compute lm_head SVD to get S and Vh
-        W = model.lm_head.weight.data.float().cpu()
-        _, S_lm_head, Vh_lm_head = torch.linalg.svd(W, full_matrices=False)
-        
-        # logits_tail uses its own internal PCA - pass intermediate rank
-        # for full geometry, then truncate at storage
-        active_null_sub = compute_logits_tail_subspace(
-            hidden_states=hs_stacked,
-            lm_head_S=S_lm_head,
-            lm_head_Vh=Vh_lm_head,
-            top_k=INTERMEDIATE_SUBSPACE_RANK
-        )
-        subspaces.set('wanda_x_notlogits', active_null_sub)
-        logger.info(f"wanda_x_notlogits subspace: intermediate={active_null_sub.V.shape[1]}, stored={top_k}")
-    
-    # Random subspace (sanity baseline)
-    if loss_subspace == 'random':
-        if write_subspace is not None:
-            d_model = write_subspace.V.shape[0]
-        elif lm_head_sub is not None:
-            d_model = lm_head_sub.V.shape[0]
-        else:
-            # Fall back to any SVD to infer d_model (input dim for residual-connected linears)
-            any_path = next(iter(layer_svd_cpu.keys()))
-            _, _, any_Vh = layer_svd_cpu[any_path]
-            d_model = any_Vh.shape[1]
-        gen_random = torch.Generator(device=device)
-        gen_random.manual_seed(_stable_u32(f"{seed}:loss_subspace:random:{d_model}:{top_k}"))
-        random_basis = torch.randn(d_model, top_k, device=device, dtype=dtype, generator=gen_random)
-        random_basis = torch.linalg.qr(random_basis.float())[0].to(dtype)  # Orthonormalize
-        subspaces.set('random', random_basis)
-        logger.info(f"random subspace: shape={random_basis.shape}")
-    
-    # =========================================================================
-    # ACTIVATION-BASED SUBSPACES (uses hidden states collected earlier)
-    # Always computed when hidden states are available (dataset_pt was provided)
+    # ACTIVATION-BASED SUBSPACES (simplified for publication)
+    # Only computes subspaces needed for 3 supported loss_subspace types:
+    # - taskdiff, taskdiff_x_suppressed_x_write (default)
     # =========================================================================
     if hs_stacked is not None:
-        logger.info(f"Computing activation-based subspaces (taskdiff, churn, suppressed, etc.)...")
+        logger.info(f"Computing activation-based subspaces (taskdiff, suppressed)...")
         
-        # Compute taskdiff subspace - use INTERMEDIATE rank for full geometry
+        # Compute taskdiff subspace - PCA on cho-rej difference
         task_diff_subspace = compute_task_diff_from_hidden_states(
             hidden_states=hs_stacked,
             top_k=INTERMEDIATE_SUBSPACE_RANK,
             layer_frac=loss_hs_frac_for_task,
         )
-        subspaces.set('taskdiff', task_diff_subspace)  # Full Subspace with S for energy thresholding
-
-        # taskdiff_write: per-layer contributions that differ between cho/rej
-        taskdiff_write_subspace = compute_task_diff_from_hidden_states(
-            hidden_states=hs_stacked,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-            layer_frac=loss_hs_frac_for_task,
-            use_layer_diffs=True,
-        )
-        subspaces.set('taskdiff_write', taskdiff_write_subspace)
+        subspaces.set('taskdiff', task_diff_subspace)
         
-        # Compute suppressed subspace (from layer diffs) - use INTERMEDIATE rank
+        # Compute suppressed subspace (written but erased by later layers)
         suppressed_subspace = compute_suppressed_from_hidden_states(
             hidden_states=hs_stacked,
             lm_head_subspace=lm_head_sub,
             top_k=INTERMEDIATE_SUBSPACE_RANK,
         )
-        subspaces.set('suppressed', suppressed_subspace)  # Full Subspace with S for energy thresholding
+        subspaces.set('suppressed', suppressed_subspace)
         
-        # Compute churn subspace - use INTERMEDIATE rank
-        churn_subspace = compute_churn_from_hidden_states(
-            hidden_states=hs_stacked,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-        )
-        subspaces.set('churn', churn_subspace)  # Full Subspace with S for energy thresholding
-        
-        # taskdiff_x_suppressed = taskdiff ∩ suppressed (compound: needs full geometry)
+        # taskdiff_x_suppressed = taskdiff ∩ suppressed (stenographic signal)
         steno_subspace = compute_stenographic_subspace(
             task_diff_subspace=task_diff_subspace,
             suppressed_subspace=suppressed_subspace,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,  # Full geometry for intersection
-        )
-        subspaces.set('taskdiff_x_suppressed', steno_subspace)  # Store full Subspace for energy thresholding
-        
-        # NEW: Prediction Suppression = Suppressed & Read
-        if suppressed_subspace is not None and read_subspace is not None:
-            pred_supp = approx_intersection(suppressed_subspace, read_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('prediction_suppression', pred_supp)
-            logger.info(f"prediction_suppression subspace: intermediate={pred_supp.V.shape[1]}, stored={top_k}")
-
-        # Compound subspaces: taskdiff ∩ X (all need full geometry for intersection)
-        if hfl_sub is not None:
-            task_intersect_hfl = approx_intersection(task_diff_subspace, hfl_sub, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_x_write_x_notlogits', task_intersect_hfl)
-        
-        if write_subspace is not None:
-            task_intersect_write = approx_intersection(task_diff_subspace, write_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_x_write', task_intersect_write)
-        
-        task_intersect_churn = approx_intersection(task_diff_subspace, churn_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_x_churn', task_intersect_churn)
-        
-        task_intersect_steno = approx_intersection(task_diff_subspace, steno_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_x_taskdiff_x_suppressed', task_intersect_steno)
-        
-        # Churn variants (constructive = magnitude increase, suppressive = magnitude decrease)
-        churn_constructive = compute_churn_constructive_from_hidden_states(
-            hidden_states=hs_stacked,
             top_k=INTERMEDIATE_SUBSPACE_RANK,
         )
-        subspaces.set('churn_constructive', churn_constructive)
+        subspaces.set('taskdiff_x_suppressed', steno_subspace)
         
-        churn_suppressive = compute_churn_suppressive_from_hidden_states(
-            hidden_states=hs_stacked,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-        )
-        subspaces.set('churn_suppressive', churn_suppressive)
-        
-        # task_diff_constructive = directions where task magnitude INCREASES
-        task_diff_constructive = compute_task_diff_constructive_from_hidden_states(
-            hidden_states=hs_stacked,
-            top_k=INTERMEDIATE_SUBSPACE_RANK,
-            layer_range=(min_adapter_layer_frac, loss_layer_frac),
-        )
-        subspaces.set('taskdiff_constructive', task_diff_constructive)
-        
-        # Task compound subspaces with specific weight subspaces
-        if write_subspace is not None:
-            task_write = approx_intersection(task_diff_subspace, write_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_x_write', task_write)
-        
-        if read_subspace is not None:
-            # task ∩ read: task-discriminative directions that are read by attention/MLP inputs
-            task_read = approx_intersection(task_diff_subspace, read_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_read', task_read)
-        
-        # task ∩ lm_head: task directions that affect output logits
-        if lm_head_sub is not None:
-            task_lm_head = compute_task_lm_head_subspace(
-                task_diff_subspace=task_diff_subspace,
-                lm_head_subspace=lm_head_sub,
-                top_k=INTERMEDIATE_SUBSPACE_RANK,
-            )
-            subspaces.set('taskdiff_x_logits_read', task_lm_head)
-        
-        if wnr_sub is not None:
-            task_wnr = compute_task_wnr_subspace(
-                task_diff_subspace=task_diff_subspace,
-                write_not_read_subspace=wnr_sub,
-                top_k=INTERMEDIATE_SUBSPACE_RANK,
-            )
-            subspaces.set('taskdiff_x_write_not_read', task_wnr)
-        
-        # Additional compound intersections for sweeps
-        task_intersect_churn_constructive = approx_intersection(task_diff_subspace, churn_constructive, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_x_churn_constructive', task_intersect_churn_constructive)
-        
-        if wnr_sub is not None and write_subspace is not None:
-            taskdiff_write_intersect_wnr = approx_intersection(taskdiff_write_subspace, wnr_sub, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_write_x_write_not_read', taskdiff_write_intersect_wnr)
-            
-            taskdiff_write_intersect_suppressed = approx_intersection(taskdiff_write_subspace, suppressed_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_write_x_suppressed', taskdiff_write_intersect_suppressed)
-            
-            taskdiff_write_intersect_churn = approx_intersection(taskdiff_write_subspace, churn_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_write_x_churn', taskdiff_write_intersect_churn)
-        
-        # task_constructive_intersect_* (task_diff_constructive ∩ X)
-        if hfl_sub is not None:
-            task_constructive_intersect_hfl = approx_intersection(task_diff_constructive, hfl_sub, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_constructive_x_write_x_notlogits', task_constructive_intersect_hfl)
-        
-        task_constructive_intersect_suppressed = approx_intersection(task_diff_constructive, suppressed_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_constructive_x_suppressed', task_constructive_intersect_suppressed)
-        
-        task_constructive_intersect_churn = approx_intersection(task_diff_constructive, churn_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_constructive_x_churn', task_constructive_intersect_churn)
-        
-        task_constructive_intersect_churn_constructive = approx_intersection(task_diff_constructive, churn_constructive, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_constructive_x_churn_constructive', task_constructive_intersect_churn_constructive)
-        
-        # taskdiff_x_suppressed_x_* (taskdiff_x_suppressed ∩ X)
-        steno_intersect_churn = approx_intersection(steno_subspace, churn_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
-        subspaces.set('taskdiff_x_suppressed_x_churn', steno_intersect_churn)
-        
+        # taskdiff_x_suppressed_x_write = steno ∩ write (default loss subspace)
         if write_subspace is not None:
             steno_intersect_write = approx_intersection(steno_subspace, write_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
             subspaces.set('taskdiff_x_suppressed_x_write', steno_intersect_write)
         
-        if hfl_sub is not None:
-            steno_intersect_hfl = approx_intersection(steno_subspace, hfl_sub, top_k=INTERMEDIATE_SUBSPACE_RANK)
-            subspaces.set('taskdiff_x_suppressed_x_write_x_notlogits', steno_intersect_hfl)
-        
-        # taskdiff_write_x_notlogits: task-discriminative directions in write ∩ notlogits
-        # (like write_x_notlogits but weighted by cho-rej difference)
-        if write_subspace is not None and lm_head_sub is not None:
-            taskdiff_x_write_x_notlogits = compute_taskdiff_x_write_x_notlogits_subspace(
-                hidden_states=hs_stacked,
-                write_subspace=write_subspace,
-                lm_head_S=lm_head_S_full,
-                lm_head_Vh=lm_head_Vh_full,
-                top_k=INTERMEDIATE_SUBSPACE_RANK,
-                layer_frac=loss_layer_frac,
-            )
-            subspaces.set('taskdiff_write_x_notlogits', taskdiff_x_write_x_notlogits)
-        
-        logger.info(f"Activation-based subspaces computed (intermediate={INTERMEDIATE_SUBSPACE_RANK}, stored={top_k}): {[k for k in subspaces.keys() if 'task' in k or 'steno' in k or 'churn' in k]}")
+        logger.info(f"Activation-based subspaces computed: taskdiff, suppressed, taskdiff_x_suppressed, taskdiff_x_suppressed_x_write")
     
     # Cleanup hidden states if collected
     if hs_stacked is not None:
