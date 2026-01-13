@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Centralized layer selection logic for AntiPaSTO training.
 
-SIMPLIFIED FOR PUBLICATION (2026-01-13):
-Only 3 loss_subspace types are supported: taskdiff_x_suppressed_x_write (default), write, taskdiff.
-Deprecated gradient-based layer selection has been removed.
-
 FLOW:
 1. compute_simple_layer_selection():
    - Computes SVD for all linear layers (needed for adapter init)
    - Selects layers uniformly across valid depth range
-   - Computes subspaces: write, taskdiff, taskdiff_x_suppressed_x_write
+   - Computes subspaces: write, read, taskdiff, and combinations
+
+Supported loss_subspace types:
+- taskdiff_x_suppressed_x_write (default): empirical stenographic + writable
+- taskdiff_x_logits_read: task signal that affects lm_head output
+- taskdiff_x_write_not_read: task signal in static write-not-read space
+- taskdiff_x_write_x_notlogits: task ∩ write ∩ (lm_head^⊥)
+- write, taskdiff: basic building blocks
 
 Key functions:
 - compute_simple_layer_selection(): Main entry point for layer/subspace selection
@@ -36,10 +39,15 @@ from transformers import DataCollatorWithPadding
 import gc
 from antipasto.peft_utils.subspaces import (
     compute_lm_head_svd,
+    compute_lm_head_subspace,
     compute_suppressed_from_hidden_states,
     compute_task_diff_from_hidden_states,
     compute_module_subspace_from_svds,
     compute_stenographic_subspace,
+    compute_write_not_read_subspace,
+    compute_write_x_notlogits_subspace,
+    compute_task_lm_head_subspace,
+    compute_task_wnr_subspace,
     find_write_modules,
     find_read_modules,
     approx_intersection,
@@ -965,7 +973,55 @@ def compute_simple_layer_selection(
             steno_intersect_write = approx_intersection(steno_subspace, write_subspace, top_k=INTERMEDIATE_SUBSPACE_RANK)
             subspaces.set('taskdiff_x_suppressed_x_write', steno_intersect_write)
         
-        logger.info(f"Activation-based subspaces computed: taskdiff, suppressed, taskdiff_x_suppressed, taskdiff_x_suppressed_x_write")
+        # =====================================================================
+        # STATIC (model-intrinsic) subspaces - alternative to empirical suppressed
+        # =====================================================================
+        
+        # taskdiff_x_logits_read = task signal that AFFECTS output (opposite of suppressed)
+        taskdiff_logits_read = compute_task_lm_head_subspace(
+            task_diff_subspace=task_diff_subspace,
+            lm_head_subspace=lm_head_sub,
+            top_k=INTERMEDIATE_SUBSPACE_RANK,
+        )
+        subspaces.set('taskdiff_x_logits_read', taskdiff_logits_read)
+        
+        # Static write-not-read and its task intersection
+        if write_subspace is not None and read_subspace is not None:
+            # write_not_read = static: write^⊥_read^⊥_lmhead
+            write_not_read = compute_write_not_read_subspace(
+                write_subspace=write_subspace,
+                read_subspace=read_subspace,
+                lm_head_subspace=lm_head_sub,
+                top_k=INTERMEDIATE_SUBSPACE_RANK,
+            )
+            subspaces.set('write_not_read', write_not_read)
+            
+            # taskdiff_x_write_not_read = task in static hidden channels
+            taskdiff_wnr = compute_task_wnr_subspace(
+                task_diff_subspace=task_diff_subspace,
+                write_not_read_subspace=write_not_read,
+                top_k=INTERMEDIATE_SUBSPACE_RANK,
+            )
+            subspaces.set('taskdiff_x_write_not_read', taskdiff_wnr)
+        
+        # write_x_notlogits = static: write ∩ (lm_head^⊥)
+        if write_subspace is not None:
+            write_x_notlogits = compute_write_x_notlogits_subspace(
+                write_subspace=write_subspace,
+                lm_head_subspace=lm_head_sub,
+                top_k=INTERMEDIATE_SUBSPACE_RANK,
+            )
+            subspaces.set('write_x_notlogits', write_x_notlogits)
+            
+            # taskdiff_x_write_x_notlogits = task ∩ write ∩ (lm_head^⊥)
+            taskdiff_write_notlogits = approx_intersection(
+                task_diff_subspace, write_x_notlogits, top_k=INTERMEDIATE_SUBSPACE_RANK
+            )
+            taskdiff_write_notlogits.name = 'taskdiff_x_write_x_notlogits'
+            subspaces.set('taskdiff_x_write_x_notlogits', taskdiff_write_notlogits)
+        
+        computed_subs = list(subspaces._subspaces.keys())
+        logger.info(f"Subspaces computed: {computed_subs}")
     
     # Cleanup hidden states if collected
     if hs_stacked is not None:
