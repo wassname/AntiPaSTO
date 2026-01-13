@@ -55,12 +55,6 @@ class TrainingConfig:
     model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     quantization_type: Literal["4bit", "8bit", "none"] = "none"
 
-    upgrad: bool = False
-    """Use UPGrad optimizer for better convergence/stability. See https://torchjd.org"""
-
-    upgrad_balance: float = 1.0
-    """Balance parameter for UPGrad optimizer, where to be on the pareto frontier"""
-
     n_modules: int = 512
     """Total number of layer×module combinations to select (by gradient importance).
     
@@ -125,11 +119,6 @@ class TrainingConfig:
 
     r: int = 64
     """Adapter rank (ideally should be proportional to hidden dim)"""
-
-    svd_aligned_init: bool = False
-    """Initialize delta_s proportional to S (normalized). 
-    Very stable init (std=0.26 across seeds vs 7.5 for random).
-    Effectively multiplicative: S + α*(k*S) = S*(1 + α*k)."""
 
     rot_u: bool = False
     """Rotate U (output space). Less stable, diverges from loss space"""
@@ -513,8 +502,7 @@ class TrainingConfig:
         # Short names for variation keys
         key_short = {
             'loss_mode': 'lm', 'rot_u': 'urot', 'rot_v': 'vrot',
-            'n_modules': 'M', 'lr': 'lr',
-            'upgrad': 'upg', 'upgrad_balance': 'upgB', 'coh': 'coh', 'mono': 'mono',
+            'n_modules': 'M', 'lr': 'lr', 'coh': 'coh', 'mono': 'mono',
             'orth_weight': 'orth',
 
             'dataset_name': 'ds', 'n_last_tokens': 'tok', 

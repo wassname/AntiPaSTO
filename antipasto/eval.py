@@ -153,7 +153,6 @@ def gen_with_choices(model, tokenizer, input_ids, attention_mask, choice_ids, co
     
     # Optionally continue generation
     if continue_n_tokens > 0:
-        # TODO just use generate?s
         for _ in range(continue_n_tokens):
             # Get next token from previous logits
             next_token = out.logits[:, -1].log_softmax(-1).argmax(-1, keepdim=True)  # [b, 1]
