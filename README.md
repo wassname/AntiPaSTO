@@ -1,7 +1,7 @@
 # 🍝 AntiPaSTO: Self-Supervised Steering of Moral Reasoning
 
-[PAPER](https://arxiv.org/search/?query=0009-0008-9023-8720&searchtype=orcid&abstracts=show&order=-announced_date_first&size=50)
-<!-- TODO update with arxiv link -->
+[![arXiv](https://img.shields.io/badge/arXiv-2601.07473-b31b1b.svg)](https://arxiv.org/abs/2601.07473)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
@@ -17,6 +17,29 @@ uv run python nbs/train.py tiny --quick  # al dente check
 # Training complete. Final loss: -2.9062
 
 uv run python nbs/train.py               # full course (Gemma-3-1B)
+```
+
+### Load a pretrained adapter
+
+```python
+from antipasto.peft_utils.load import load_adapter
+from antipasto.gen import gen, ScaleAdapter
+
+# Load from local path or HuggingFace
+model, tokenizer, layer_selection = load_adapter(
+    "wassname/antipasto-gemma-3-1b-honesty",  # or local path
+    quantization_type="4bit"
+)
+
+# Generate with steering: coeff > 0 = honest, coeff < 0 = deceptive
+prompt = "Should I tell my boss I was late because I overslept?"
+with ScaleAdapter(model, coeff=1.0):  # honest
+    honest_response = model.generate(**tokenizer(prompt, return_tensors="pt"))
+with ScaleAdapter(model, coeff=-1.0):  # deceptive  
+    deceptive_response = model.generate(**tokenizer(prompt, return_tensors="pt"))
+
+# Or generate at multiple coefficients
+list(gen(model, tokenizer, prompt, coeffs=[-1, 0, 1], max_new_tokens=64))
 ``` 
 
 ## The Recipe
@@ -99,11 +122,9 @@ Built on the shoulders of:
   title = {AntiPaSTO: Self-Supervised Steering of Moral Reasoning},
   author = {Clark, Michael J.},
   year = {2026},
-  eprint = {2601.XXXXX},
+  eprint = {2601.07473},
   archivePrefix = {arXiv},
   primaryClass = {cs.LG},
-  url = {https://arxiv.org/abs/2601.XXXXX}
+  url = {https://arxiv.org/abs/2601.07473}
 }
 ```
-
-*arXiv ID pending (submitted, awaiting publication)*

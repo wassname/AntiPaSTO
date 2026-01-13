@@ -5,9 +5,38 @@ import safetensors.torch
 import torch
 import json
 from loguru import logger
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from antipasto.peft_utils.layer_selection import LayerSelection
+
+
+def resolve_adapter_path(adapter_folder: Union[str, Path]) -> Path:
+    """Resolve adapter path, downloading from HuggingFace Hub if needed.
+    
+    Args:
+        adapter_folder: Local path or HuggingFace repo ID (e.g., 'wassname/antipasto-gemma-3-1b-honesty')
+        
+    Returns:
+        Local Path to adapter folder
+    """
+    adapter_folder = str(adapter_folder)
+    
+    # Check if it's a local path
+    local_path = Path(adapter_folder)
+    if local_path.exists():
+        return local_path
+    
+    # Try as HuggingFace repo ID
+    if "/" in adapter_folder and not adapter_folder.startswith("/"):
+        from huggingface_hub import snapshot_download
+        logger.info(f"Downloading adapter from HuggingFace: {adapter_folder}")
+        local_dir = snapshot_download(
+            repo_id=adapter_folder,
+            allow_patterns=["*.json", "*.safetensors", "*.pt"],
+        )
+        return Path(local_dir)
+    
+    raise FileNotFoundError(f"Adapter not found locally or on HuggingFace: {adapter_folder}")
 
 
 def add_adapter_name_to_sd(sd, adapter_name="default", prefix="antipasto_"):
@@ -97,7 +126,7 @@ def save_adapter(
 
 
 def load_adapter(
-    adapter_folder: Path,
+    adapter_folder: Union[str, Path],
     base_model=None,
     model_id: str = None,
     quantization_type: str = None,
@@ -108,34 +137,37 @@ def load_adapter(
     Either provide base_model directly, OR model_id + quantization_type to load it.
     Model ID can also be read from adapter_config.json (base_model_name_or_path).
     
+    Supports loading from:
+    - Local path: load_adapter("outputs/adapters/my_run")
+    - HuggingFace Hub: load_adapter("wassname/antipasto-gemma-3-1b-honesty")
+    
     Args:
-        adapter_folder: Path to saved adapter (contains adapter_model.safetensors, etc.)
+        adapter_folder: Path to saved adapter or HuggingFace repo ID
         base_model: Pre-loaded base model (optional, provide this OR model_id)
         model_id: HuggingFace model ID to load (optional, auto-detected from adapter_config.json)
-        quantization_type: Quantization type for loading model (e.g., "nf4", "int8", None)
+        quantization_type: Quantization type for loading model (e.g., "4bit", "8bit", None)
         adapter_name: Name to assign to the loaded adapter
         
     Returns:
         Tuple of (PeftModel with loaded adapter, tokenizer, LayerSelection if saved else None)
     
     Example:
-        # Auto-detect model from adapter_config.json:
+        # Load from HuggingFace:
+        model, tokenizer, layer_selection = load_adapter("wassname/antipasto-gemma-3-1b-honesty")
+        
+        # Load from local path:
         model, tokenizer, layer_selection = load_adapter(Path("outputs/adapters/my_run"))
         
-        # Or specify model explicitly:
-        model, tokenizer, layer_selection = load_adapter(
-            Path("outputs/adapters/my_run"),
-            model_id="google/gemma-3-270m-it",
-        )
-        
         # For inference:
+        from antipasto.gen import ScaleAdapter
         with ScaleAdapter(model, coeff=1.0):
             output = model.generate(...)
     """
     from antipasto.peft_utils.antipasto_adapter import register_antipasto_peft, AntiPaSTOConfig
     from antipasto.train.model_setup import load_model
     
-    adapter_folder = Path(adapter_folder)
+    # Resolve path (downloads from HuggingFace if needed)
+    adapter_folder = resolve_adapter_path(adapter_folder)
     
     # Register AntiPaSTO adapter type
     register_antipasto_peft()

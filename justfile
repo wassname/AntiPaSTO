@@ -1,6 +1,8 @@
 
 
 default:
+    #!/bin/bash
+    set -e
     uv run python nbs/train.py tiny --quick
     uv run python nbs/train.py tiny
     uv run python nbs/train.py q06b-24gb

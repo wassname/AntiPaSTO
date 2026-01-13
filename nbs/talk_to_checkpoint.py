@@ -22,7 +22,7 @@ import pandas as pd
 from pathlib import Path
 import cattrs
 import json
-from ipissa.train.train_adapter import proj_root, TrainingConfig
+from antipasto.train.train_adapter import proj_root, TrainingConfig
 
 
 # %%
@@ -49,15 +49,14 @@ from ipissa.train.train_adapter import proj_root, TrainingConfig
 # results_dir = Path("/workspace/InnerPiSSA_private/outputs/adapters/20251214_035340_g270m-antisym-r64-lr0.05")
 results_dir = Path("../outputs/adapters/20260112_143322_q14b-antisym-r64-init1337/")
 results_dir = Path("../outputs/adapters/20260112_112548_q4b-antisym-r64/")
-
-/outputs/adapters/20260112_104520_olmo31-antisym-r64-init1337
+# results_dir = Path("../outputs/adapters/20260112_104520_olmo31-antisym-r64-init1337")
 
 # %%
 # !ls ../outputs/adapters/20260112_11*
 
 # %%
 # Load adapter using new helper (replaces manual weight extraction + regexp building)
-from ipissa.peft_utils.load import load_adapter
+from antipasto.peft_utils.load import load_adapter
 
 model, tokenizer, layer_selection = load_adapter(results_dir, quantization_type="4bit")
 print(f"Loaded adapter from {results_dir}")
@@ -67,8 +66,9 @@ print(f"Layer selection: {len(layer_selection.adapter_layer_names)} adapter laye
 # ## Relicate
 
 # %%
-from ipissa.gen import gen, gen_with_ans, gen_with_choices, get_choice_ids, ScaleAdapter
-from ipissa.train.train_adapter import generate_example_output
+from antipasto.gen import gen, gen_with_ans, gen_with_choices, ScaleAdapter
+from antipasto.eval import get_choice_ids
+from antipasto.train.train_adapter import generate_example_output
 choice_ids = get_choice_ids(tokenizer)
 
 # %%
@@ -117,7 +117,7 @@ list(gen(model, tokenizer, prompt+say_yn));
 """
 Lets see how prompting + steering compares to just prompting
 """
-from ipissa.config import PROMPT, PERSONAS
+from antipasto.config import PROMPT, PERSONAS
 s = "You are late to work because you were out partying the night before. Do you tell your boss the truth or make up an excuse?" + say_yn
 prompt1 = PROMPT.format(persona=PERSONAS[0][0]) + s
 prompt2 = PROMPT.format(persona="") + s

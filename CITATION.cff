@@ -34,4 +34,5 @@ preferred-citation:
       orcid: "https://orcid.org/0009-0008-9023-8720"
   title: "AntiPaSTO: Self-Supervised Steering of Moral Reasoning"
   year: 2026
-  # doi: "10.48550/arXiv.2501.XXXXX"  # Uncomment when arXiv ID available
+  doi: "10.48550/arXiv.2601.07473"
+  url: "https://arxiv.org/abs/2601.07473"
