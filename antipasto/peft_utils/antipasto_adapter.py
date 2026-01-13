@@ -90,10 +90,6 @@ class AntiPaSTOConfig(PeftConfig):
         default="cayley",
         metadata={"help": "Rotation parameterization: 'cayley' (recommended, exact reversibility) or 'matrix_exp' (exact but slower)"}
     )
-    svd_aligned_init: bool = field(
-        default=False,
-        metadata={"help": "Initialize delta_s proportional to S (normalized). Gives very stable init (std=0.26 across seeds)."}
-    )
     alpha: float = field(
         default=1.0,
         metadata={"help": "Steering coefficient for rotations (1.0 = forward, -1.0 = reverse, 0.0 = disabled)"}
@@ -102,10 +98,6 @@ class AntiPaSTOConfig(PeftConfig):
         default=torch.pi/3,
         metadata={"help": "Max rotation angle (radians, soft-clamped). Small angles (≤0.3) ensure R(α)@S ≈ -R(-α)@S for output symmetry at α=±1. Set to inf to disable."}
     )
-    # steer_s: bool = field(
-    #     default=False,
-    #     metadata={"help": "Whether to apply steering to singular value scaling"}
-    # )
     
     # Standard PEFT parameters
     target_modules: Optional[list[str]] = field(
@@ -142,7 +134,6 @@ class AntiPaSTOLayer(BaseTunerLayer):
         self.antipasto_rotation_method = {}
         self.antipasto_alpha = {}
         self.antipasto_max_rotation_angle = {}
-        self.antipasto_svd_aligned_init = {}
         
         # SVD components (per adapter) - simplified naming like SVDSteering
         self.antipasto_u = BufferDict({})  # U: [d_out, r]
@@ -175,7 +166,6 @@ class AntiPaSTOLayer(BaseTunerLayer):
         rotate_v,
         rotation_method,
         max_rotation_angle,
-        svd_aligned_init: bool = False,
         precomputed_indices: Optional[Dict[str, torch.Tensor]] = None,
         svd_bases: Optional[Dict[str, torch.Tensor]] = None,
         layer_name: Optional[str] = None,
@@ -199,7 +189,6 @@ class AntiPaSTOLayer(BaseTunerLayer):
         self.antipasto_rotate_v[adapter_name] = rotate_v
         self.antipasto_rotation_method[adapter_name] = rotation_method
         self.antipasto_max_rotation_angle[adapter_name] = max_rotation_angle
-        self.antipasto_svd_aligned_init[adapter_name] = svd_aligned_init
 
         # Get base weight
         base_weight = self.get_base_layer().weight
@@ -281,13 +270,8 @@ class AntiPaSTOLayer(BaseTunerLayer):
             torch.zeros(r_actual, device=device), 
             requires_grad=True
         )
-        if self.antipasto_svd_aligned_init.get(adapter_name, False):
-            # SVD-aligned init: delta_s ∝ S (normalized). Very stable across seeds (std=0.26).
-            s_normalized = S / S.max()
-            self.antipasto_delta_s[adapter_name].data = s_normalized * 4e-4 + 4e-4
-        else:
-            # Default: small random noise
-            nn.init.trunc_normal_(self.antipasto_delta_s[adapter_name], std=4e-4, mean=4e-4)
+        # Small random noise init
+        nn.init.trunc_normal_(self.antipasto_delta_s[adapter_name], std=4e-4, mean=4e-4)
 
 
 
@@ -572,15 +556,11 @@ class AntiPaSTOModel(BaseTuner):
             "rotate_u": antipasto_config.rotate_u,
             "rotate_v": antipasto_config.rotate_v,
             "rotation_method": antipasto_config.rotation_method,
-            # "block_size": antipasto_config.block_size,
             "alpha": antipasto_config.alpha,
             "max_rotation_angle": antipasto_config.max_rotation_angle,
-            "svd_aligned_init": antipasto_config.svd_aligned_init,
             "precomputed_indices": antipasto_config.precomputed_indices,
             "svd_bases": antipasto_config.svd_bases,
-            "layer_name": current_key,  # Pass layer name for dim index lookup
-            # "data_aware_init_use_magnitudes": antipasto_config.data_aware_init_use_magnitudes,
-            # "steer_s": antipasto_config.steer_s,
+            "layer_name": current_key,
             **optional_kwargs,
         }
 

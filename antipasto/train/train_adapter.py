@@ -28,8 +28,6 @@ from baukit.nethook import TraceDict
 from loguru import logger
 from tabulate import tabulate
 from torch.utils.data import DataLoader
-from torchjd import autojac
-from torchjd.aggregation import UPGrad
 from tqdm.auto import tqdm
 from transformers import DataCollatorWithPadding
 
@@ -955,11 +953,7 @@ def train_epoch(
 
         # === LoRA Trust Region: SOFT constraint (loss term) ===
         # Add norm penalty to loss before backward for LoRA/DoRA adapters.
-        if config.upgrad:
-            # UPGrad: balance gradients from per-layer projection, coherence, and monotonic losses
-            autojac.backward(loss_components, aggregator, parallel_chunk_size=1)
-        else:
-            total_loss.mean().backward()
+        total_loss.mean().backward()
         
         # Logging
         log_n_steps = max(1, len(train_dataloader) * config.n_epochs // config.n_logs)
@@ -1831,24 +1825,6 @@ def train_model(config: TrainingConfig):
     )
 
     total_steps = config.n_epochs * len(train_dataloader) // config.grad_accum_steps
-    if config.upgrad:
-        # Build pref_vector: balance projection (per layer, per coef) vs coherence vs monotonic
-        # Structure: [proj_L0_pos, proj_L0_neg, proj_L1_pos, proj_L1_neg, ..., coh_pos, coh_neg, mono]
-        n_loss_layers = len(loss_layers)
-        pref_vec = []
-        for _ in range(n_loss_layers):
-            pref_vec.append(10*config.upgrad_balance)  # proj coef=+1
-            pref_vec.append(10*1.0 / config.upgrad_balance)  # proj coef=-1 (inverse balance)
-        if config.coh:
-            pref_vec.append(0.5)  # coh coef=+1
-            pref_vec.append(0.5)  # coh coef=-1
-        if config.mono:
-            pref_vec.append(1.0)  # monotonic ordering
-        aggregator = UPGrad(
-            pref_vector=torch.tensor(pref_vec, device=model.device),
-        )
-    else:
-        aggregator = None
     opt = torch.optim.AdamW(
         model.parameters(), lr=config.lr, weight_decay=config.wd
     )
@@ -1985,11 +1961,12 @@ def train_model(config: TrainingConfig):
         model, 
         save_folder, 
         config.dataset_name,
+        model_id=config.model_name,
         layer_selection=layer_selection,
         precomputed_indices=precomputed_indices_for_save,
     )
 
-    # Save training config
+    # Save training config (for full reproducibility, optional for loading)
     with open(save_folder / "training_config.json", "w") as f:
         json.dump(cattrs.unstructure(config), f, indent=4)
 

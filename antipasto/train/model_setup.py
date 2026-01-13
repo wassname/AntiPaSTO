@@ -96,7 +96,6 @@ def setup_adapter(base_model, config: TrainingConfig, target_modules: str, preco
         rotate_u=config.rot_u,
         rotate_v=config.rot_v,
         max_rotation_angle=config.max_rotation_angle,
-        svd_aligned_init=config.svd_aligned_init,
         task_type="CAUSAL_LM",
         target_modules=target_modules,
         precomputed_indices=precomputed_indices,
