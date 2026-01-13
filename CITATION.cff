@@ -1,0 +1,37 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: "AntiPaSTO: Self-Supervised Steering of Moral Reasoning"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Michael J
+    family-names: Clark
+    orcid: "https://orcid.org/0009-0008-9023-8720"
+repository-code: "https://github.com/wassname/AntiPaSTO"
+url: "https://github.com/wassname/AntiPaSTO"
+license: MIT
+version: "0.5.0"
+date-released: "2026-01-13"
+keywords:
+  - machine-learning
+  - llm
+  - steering
+  - alignment
+  - moral-reasoning
+  - pytorch
+  - peft
+abstract: >-
+  Self-supervised steering of moral reasoning via antiparallel 
+  subspace training. Gradient-based steering in SVD transformation 
+  space, trained on internal representations without preference labels.
+preferred-citation:
+  type: article
+  authors:
+    - given-names: Michael J
+      family-names: Clark
+      orcid: "https://orcid.org/0009-0008-9023-8720"
+  title: "AntiPaSTO: Self-Supervised Steering of Moral Reasoning"
+  year: 2026
+  # doi: "10.48550/arXiv.2501.XXXXX"  # Uncomment when arXiv ID available

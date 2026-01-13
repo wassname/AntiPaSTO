@@ -1,5 +1,7 @@
 """
 AntiPaSTO adapter - combines SVFT (Singular Value Fine-Tuning) with changes
+https://github.com/wassname/AntiPaSTO
+(c) 2026 Michael J Clark, MIT License
 
 SVFT decomposes weights via SVD: W = U @ S @ V^T
 - U, V are frozen singular vectors (orthonormal bases)

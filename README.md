@@ -95,14 +95,14 @@ Built on the shoulders of:
 ## Citation
 
 ```bibtex
-@misc{clark2025antipasto,
+@misc{clark2026antipasto,
   title = {AntiPaSTO: Self-Supervised Steering of Moral Reasoning},
   author = {Clark, Michael J.},
-  year = {2025},
-  eprint = {2501.XXXXX},
+  year = {2026},
+  eprint = {2601.XXXXX},
   archivePrefix = {arXiv},
   primaryClass = {cs.LG},
-  url = {https://arxiv.org/abs/2501.XXXXX}
+  url = {https://arxiv.org/abs/2601.XXXXX}
 }
 ```
 

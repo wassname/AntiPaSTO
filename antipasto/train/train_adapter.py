@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Train contrastive AntiPaSTO adapter for steering LLMs.
+https://github.com/wassname/AntiPaSTO
+(c) 2026 Michael J Clark, MIT License
 
 Example usage:
     python nbs/train.py --batch_size 14 --n_epochs 30
