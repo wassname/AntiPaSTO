@@ -479,10 +479,12 @@ def contrastive_steering_loss_with_ref(
             fisher_stats[ema_key] = std_ref_detached
         std_ref = fisher_stats[ema_key].to(device=std_ref.device, dtype=std_ref.dtype)
 
-    # Build Fisher-like vectors using a shared std_ref
-    v_ref, _, _ = compute_fisher_scale(diff_ref_agg, std=std_ref, detach_std=fisher_detach_std, return_scaled=True)
-    v_pos, _, _ = compute_fisher_scale(antisym_pos_agg, std=std_ref, detach_std=fisher_detach_std, return_scaled=True)
-    v_neg, _, _ = compute_fisher_scale(antisym_neg_agg, std=std_ref, detach_std=fisher_detach_std, return_scaled=True)
+    # Build Fisher-like per-sample vectors using a shared std_ref.
+    # std_ref is estimated over the batch (and optionally EMA'd), then applied to each sample.
+    std_for_div = std_ref.detach() if fisher_detach_std else std_ref
+    v_ref = diff_ref_agg / std_for_div.unsqueeze(0)        # [b, r]
+    v_pos = antisym_pos_agg / std_for_div.unsqueeze(0)     # [b, r]
+    v_neg = antisym_neg_agg / std_for_div.unsqueeze(0)     # [b, r]
 
     fisher_info = {
         "fisher_floor_rate": info_ref["floor_activation_rate"],
@@ -490,13 +492,13 @@ def contrastive_steering_loss_with_ref(
         "fisher_std_min": info_ref["std_min"],
     }
 
-    # Compute raw dot product and cosine of delta vectors
-    dot_delta = (v_pos * v_neg).sum().expand(b)  # δ+ · δ-, want negative (antisymmetric)
-    dot_ref = (v_ref * v_ref).sum().expand(b)
-    cos_delta = F.cosine_similarity(v_pos, v_neg, dim=-1).expand(b)  # cos(δ+, δ-), want -1
-    mag_pos = v_pos.norm(p=2).expand(b)
-    mag_neg = v_neg.norm(p=2).expand(b)
-    separation_norm = v_pos.norm(p=2)
+    # Compute per-sample dot product and cosine of delta vectors
+    dot_delta = (v_pos * v_neg).sum(dim=-1)  # [b] δ+ · δ-, want negative (antisymmetric)
+    dot_ref = (v_ref * v_ref).sum(dim=-1)   # [b]
+    cos_delta = F.cosine_similarity(v_pos, v_neg, dim=-1)  # [b] cos(δ+, δ-), want -1
+    mag_pos = v_pos.norm(p=2, dim=-1)       # [b]
+    mag_neg = v_neg.norm(p=2, dim=-1)       # [b]
+    separation_norm = v_pos.norm(p=2, dim=-1).mean()  # scalar for logging
     
     # Orthogonal penalty: penalize energy not in shared antiparallel axis
     # Uses v_pos/v_neg (already in Fisher t-space)
@@ -516,34 +518,6 @@ def contrastive_steering_loss_with_ref(
     else:
         loss_orth = torch.zeros_like(dot_delta)
         orth_waste_sq = None
-    
-    # === Unified self-calibrating antisymmetry loss ===
-    # Dimensionless: (δ+ · δ-) / ||d_ref||² 
-    #   - Negative = straddling (good): δ+ and δ- point opposite from ref
-    #   - Positive = same-side (bad): both coefs moved same direction
-    # Self-calibrating: normalized by ||ref||² so comparable across model/rank/layer
-    #
-    # IMPORTANT: Use TOTAL ref norm, not per-dim. Per-dim normalization amplifies
-    # noise in dims where ref is small (e.g., δ+*δ-=+5, ref²=0.01 → per_dim=+500).
-    # At init, adapter is near-identity so both deltas are small noise in same direction.
-    # Total norm keeps loss proportional to raw dot (which correctly shows straddling).
-    #
-    # Linear + quadratic loss with symlog compression:
-    #   shifted = per_dim + margin → shifted < 0 is good (past margin)
-    #   proj_raw = shifted + relu(shifted)² → linear push, quadratic penalty on bad
-    #   loss = symlog(proj_raw) → O(1/x) gradient decay, prevents runaway
-    
-    # === Normalization for antisymmetry (delta_full mode) ===
-    # Cosine-like normalization: numerator in subspace, denominator in full space
-    # This naturally penalizes energy outside subspace: it increases denominator
-    # without contributing to numerator, diluting the antisymmetry signal.
-    ref_norm_sq = (diff_ref_agg.pow(2)).sum(dim=-1, keepdim=True).clamp(min=eps)  # [b, 1] - for diagnostics
-    if delta_pos_norm_full is not None and delta_neg_norm_full is not None:
-        norm_product = (delta_pos_norm_full * delta_neg_norm_full).unsqueeze(-1).clamp(min=eps)  # [b, 1]
-        antisym_norm_sq = norm_product
-    else:
-        # Fallback: normalize by projected ref norm
-        antisym_norm_sq = ref_norm_sq
     
     # === Antisymmetry formulation: ALIGN mode ===
     # cos(delta_pos, ref) × cos(delta_neg, ref) < 0 means one aligns, one anti-aligns
@@ -591,7 +565,7 @@ def contrastive_steering_loss_with_ref(
     # Linear + quadratic: linear keeps pushing, quadratic penalizes positive (bad)
     # symlog compresses to prevent runaway: proj_raw ∈ [-30, ~90] → loss ∈ [-3.4, 4.5]
     proj_raw = shifted + F.relu(shifted).pow(2)  # [b]
-    loss_proj = symlog(proj_raw) + loss_orth  # [b]
+    loss_proj = (proj_raw) + loss_orth  # [b]
     
     # For diagnostics: fake per-dim tensor to keep logging API consistent
     per_dim_antisym = cos_product_used.unsqueeze(-1).expand(-1, r)  # [b, r]
@@ -645,7 +619,7 @@ def contrastive_steering_loss_with_ref(
     result["proj_raw"] = proj_raw.mean().item()  # Pre-symlog loss (want negative)
     result["quad_penalty"] = quad_penalty.mean().item()  # Quadratic penalty on bad dims (want ~0)
     result["antisym_margin"] = antisym_margin  # The margin used
-    result["ref_norm_sq_mean"] = ref_norm_sq.mean().item()  # Mean ||ref||² (for margin calibration)
+    result["ref_norm_sq_mean"] = diff_ref_agg.pow(2).sum(dim=-1).mean().item()  # Mean ||ref||² (for diagnostics)
     
     # Subspace concentration diagnostics
     if delta_pos_norm_full is not None and delta_neg_norm_full is not None:
