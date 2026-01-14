@@ -17,7 +17,7 @@ Gradient-based steering in SVD transformation space, trained on internal represe
 ```sh
 uv sync --all-groups
 uv run python nbs/train.py tiny --quick  # al dente check
-# Training complete. Final loss: -2.9062
+# Training complete. Final loss: -6.1250
 
 uv run python nbs/train.py               # full course (Gemma-3-1B)
 ```

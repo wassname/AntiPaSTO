@@ -33,7 +33,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F # no not remove
 from baukit.nethook import TraceDict
-from antipasto.train.inner_contrastive_loss import compute_fisher_t
 from torch.utils.data import DataLoader, Subset
 from transformers import DataCollatorWithPadding
 import gc
