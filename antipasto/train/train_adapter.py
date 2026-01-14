@@ -258,8 +258,6 @@ def compute_batch_loss(
         fisher_var_floor_frac=config.fisher_var_floor_frac,
         fisher_abs_std_floor=config.fisher_abs_std_floor,
         fisher_detach_std=config.fisher_detach_std,
-        fisher_stats=flip_stats,
-        fisher_stats_key=basis_module_path,
     )
     
     proj_losses = {basis_module_path: loss_dict["loss_proj"]}
