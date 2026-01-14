@@ -371,6 +371,8 @@ def contrastive_steering_loss_with_ref(
     cos_neg_ref = F.cosine_similarity(v_neg, v_ref, dim=-1)  # [b]
 
     # Concentration-aware: weight by subspace focus (||proj|| / ||full||)
+    # focus ∈ [0, 1] = fraction of delta energy in loss subspace
+    # Clamped to [0, 1] because numerically can exceed 1 due to Fisher weighting mismatch
     cos_pos_ref_used = cos_pos_ref
     cos_neg_ref_used = cos_neg_ref
     focus_pos = None
@@ -378,8 +380,8 @@ def contrastive_steering_loss_with_ref(
     if delta_pos_norm_full is not None and delta_neg_norm_full is not None:
         proj_norm_pos = antisym_pos_agg.norm(dim=-1)  # [b]
         proj_norm_neg = antisym_neg_agg.norm(dim=-1)  # [b]
-        focus_pos = proj_norm_pos / delta_pos_norm_full.clamp(min=eps)
-        focus_neg = proj_norm_neg / delta_neg_norm_full.clamp(min=eps)
+        focus_pos = (proj_norm_pos / delta_pos_norm_full.clamp(min=eps)).clamp(max=1.0)
+        focus_neg = (proj_norm_neg / delta_neg_norm_full.clamp(min=eps)).clamp(max=1.0)
         if focus_softness > 0:
             focus_pos = focus_pos.pow(1.0 - focus_softness)
             focus_neg = focus_neg.pow(1.0 - focus_softness)
