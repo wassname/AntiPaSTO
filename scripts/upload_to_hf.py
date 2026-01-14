@@ -71,24 +71,25 @@ def create_model_card(adapter_path: Path, repo_id: str) -> str:
         rank = "unknown"
     
     return f'''---
-tags:
-  - antipasto
-  - peft
-  - moral-steering
-  - honesty
-  - alignment
+pipeline_tag: text-generation
 base_model: {base_model}
 library_name: peft
 license: apache-2.0
+tags:
+- antipasto
+- peft
+- moral-steering
+- honesty
+- alignment
 ---
 
 # AntiPaSTO: Honesty Steering Adapter
 
-[![arXiv](https://img.shields.io/badge/arXiv-2601.07473-b31b1b.svg)](https://arxiv.org/abs/2601.07473)
-
 🍝 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
-This adapter steers language model responses toward honest or deceptive reasoning on moral dilemmas.
+This adapter steers language model responses toward honest or deceptive reasoning on moral dilemmas. It is the implementation of the paper [AntiPaSTO: Self-Supervised Steering of Moral Reasoning](https://huggingface.co/papers/2601.07473).
+
+- **Code**: [https://github.com/wassname/AntiPaSTO](https://github.com/wassname/AntiPaSTO)
 
 ## Usage
 
