@@ -309,29 +309,36 @@ class TrainingConfig:
     Dec 2024 variance analysis: mono_weight=100 gave 50% CV on flip%, mono_weight=10-20 is stable.
     """
     
-    mono_warmup_frac: float = 0.5
-    """Fraction of training before mono loss kicks in. During warmup, mono_weight=0.
+    mono_warmup_frac: float = -2
+    """Constraint warmup using -N syntax (binary: off during warmup, on after).
     
-    - -1.0: Follow LR warmup (use warmup_pct)
-    - 0.0: No warmup, mono active from start
-    - 0.5 (default): Mono kicks in after 50% of training
+    - Negative (-N): N × warmup_pct (e.g., -2 = 2× LR warmup = 20% at default)
+    - Zero: No warmup, active from start
+    - Positive: Explicit fraction (e.g., 0.3 = 30% of training)
     
-    At symmetric init, mono is satisfied (both endpoints at baseline) → zero gradient
-    OR mono fights projection before direction established → saddle trap.
-    Long warmup (50%) lets projection find direction first, then mono enforces.
+    Default -2: constraints activate at 2× LR warmup. Lets projection establish
+    direction before constraints kick in.
     """
 
-    coh_warmup_frac: float = -1
-    """Fraction of training before coherence loss kicks in. During warmup, coh disabled.
+    coh_warmup_frac: float = -2
+    """Constraint warmup using -N syntax (binary: off during warmup, on after).
     
-    - -1.0: Follow LR warmup (use warmup_pct)
-    - 0.0: No warmup, coh active from start
-    - 0.2: Coh kicks in after 20% of training
+    - Negative (-N): N × warmup_pct (e.g., -2 = 2× LR warmup = 20% at default)
+    - Zero: No warmup, active from start  
+    - Positive: Explicit fraction (e.g., 0.3 = 30% of training)
     
-    2026-01-05 sweep finding: coh=False outperforms coh=True by +5-14 F1.
-    Likely the same great-wall problem as mono: coherence fights projection early
-    before the adapter has found its steering direction. Warmup lets projection
-    establish antisymmetry first, then coherence provides soft guardrails.
+    Default -2: synchronized with mono_warmup_frac.
+    """
+
+    conc_warmup_frac: float = -2
+    """Concentration weighting warmup using -N syntax (binary: off during warmup, on after).
+    
+    - Negative (-N): N × warmup_pct (e.g., -2 = 2× LR warmup = 20% at default)
+    - Zero: No warmup, active from start
+    - Positive: Explicit fraction (e.g., 0.3 = 30% of training)
+    
+    During warmup, delta_*_norm_full=None disables subspace focus weighting.
+    Default -2: synchronized with other constraints.
     """
 
     orth_weight: float = 0

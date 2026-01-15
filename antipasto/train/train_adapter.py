@@ -114,6 +114,23 @@ def compute_batch_loss(
     if scale_adapter_fn is None:
         scale_adapter_fn = lambda coeff: ScaleAdapter(model, coeff=coeff)
     
+    # Constraint warmup: -N syntax → N × warmup_pct, 0 → no warmup, >0 → explicit frac
+    def resolve_warmup(frac: float) -> int:
+        if frac < 0:
+            effective = (-frac) * config.warmup_pct  # -2 → 2× LR warmup
+        else:
+            effective = frac
+        return int(effective * total_steps) if total_steps else 0
+    
+    mono_warmup_steps = resolve_warmup(config.mono_warmup_frac)
+    coh_warmup_steps = resolve_warmup(config.coh_warmup_frac)
+    conc_warmup_steps = resolve_warmup(config.conc_warmup_frac)
+    
+    # Binary switch: constraints off during warmup, on after
+    effective_mono_weight = config.mono_weight if step >= mono_warmup_steps else 0.0
+    enable_coherence_effective = config.coh and (step >= coh_warmup_steps)
+    enable_concentration = step >= conc_warmup_steps
+    
     attention_mask = batch["attention_mask"]
     mask_cho = attention_mask[::2]
     mask_rej = attention_mask[1::2]
@@ -241,6 +258,7 @@ def compute_batch_loss(
     delta_neg_norm_full = delta_neg_agg.norm(dim=-1)  # [b]
     
     # Antisymmetric loss (Fisher + align + delta_full)
+    # Disable concentration during warmup (delta_norm_full=None)
     loss_dict = contrastive_steering_loss_with_ref(
         s_ref_cho=s_ref_cho,
         s_ref_rej=s_ref_rej,
@@ -253,8 +271,8 @@ def compute_batch_loss(
         orth_weight=config.orth_weight,
         antisym_margin=config.antisym_margin,
         focus_softness=config.focus_softness,
-        delta_pos_norm_full=delta_pos_norm_full,
-        delta_neg_norm_full=delta_neg_norm_full,
+        delta_pos_norm_full=delta_pos_norm_full if enable_concentration else None,
+        delta_neg_norm_full=delta_neg_norm_full if enable_concentration else None,
         fisher_var_floor_frac=config.fisher_var_floor_frac,
         fisher_abs_std_floor=config.fisher_abs_std_floor,
         fisher_detach_std=config.fisher_detach_std,
@@ -369,25 +387,6 @@ def compute_batch_loss(
             "gap_logp": gap_logp_neg,  # Absolute gap for zero-crossing
         },
     }
-    
-    # Compute effective mono_weight with warmup (follows LR warmup by default)
-    mono_warmup_frac = config.mono_warmup_frac if config.mono_warmup_frac >= 0 else config.warmup_pct
-    if config.mono and mono_warmup_frac > 0 and total_steps is None:
-        raise ValueError(
-            "compute_batch_loss: mono warmup requires total_steps, but got total_steps=None. "
-            "Pass total_steps through (train + val) so mono_weight warmup behaves as intended."
-        )
-    warmup_steps = int(mono_warmup_frac * total_steps) if total_steps else 0
-    if step < warmup_steps:
-        effective_mono_weight = 0.0
-    else:
-        effective_mono_weight = config.mono_weight
-    
-    # Compute effective coherence with warmup (same pattern as mono)
-    # 2026-01-05: coh=False >> coh=True by +5-14 F1. Warmup avoids great-wall problem.
-    coh_warmup_frac = config.coh_warmup_frac if config.coh_warmup_frac >= 0 else config.warmup_pct
-    coh_warmup_steps = int(coh_warmup_frac * total_steps) if total_steps else 0
-    enable_coherence_effective = config.coh and (step >= coh_warmup_steps)
     
     total_loss, loss_components_dict, meta_pos, meta_neg, meta_shared = combine_dual_coef_losses(
         loss_pos=loss_results[+1.0],
@@ -1356,7 +1355,7 @@ def evaluate_model(
 
 
 @torch.no_grad()
-def generate_example_output(model, tokenizer, choice_ids, max_new_tokens=64, instructions=""):
+def generate_example_output(model, tokenizer, choice_ids, max_new_tokens=64, instructions="", skip_special_tokens=False):
     """Generate example outputs at different steering coefficients to show training progress.
 
     Args:
@@ -1404,8 +1403,8 @@ Action: Tell a white lie"""
     pmass = logp_choices.exp().sum(-1) 
 
     N = input_ids.shape[1]
-    q = tokenizer.decode(outputs.sequences[0][:N], skip_special_tokens=False)
-    a = tokenizer.decode(outputs.sequences[0][N:], skip_special_tokens=False)
+    q = tokenizer.decode(outputs.sequences[0][:N], skip_special_tokens=skip_special_tokens)
+    a = tokenizer.decode(outputs.sequences[0][N:], skip_special_tokens=skip_special_tokens)
     score = torch.mean(logratios).item()
 
     return (q, a, score, seq_nll[0].item(), pmass[0].item())
