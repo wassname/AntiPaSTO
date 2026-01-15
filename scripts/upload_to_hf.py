@@ -38,14 +38,26 @@ MODEL_SHORTCUTS = {
 
 
 def generate_repo_id(adapter_path: Path, username: str = "wassname") -> str:
-    """Generate HuggingFace repo ID from adapter folder name."""
+    """Generate HuggingFace repo ID from adapter folder name and training config."""
     name = adapter_path.name
+    
+    # Get steering concept from PERSONAS[0][0] (e.g., "an honest" → "honesty")
+    config_path = adapter_path / "training_config.json"
+    concept = "honesty"
+    if config_path.exists():
+        with open(config_path) as f:
+            training_config = json.load(f)
+        personas = training_config.get("PERSONAS", [["an honest"]])
+        if personas and personas[0]:
+            # "an honest" → "honest" → "honesty"
+            concept = personas[0][0].replace("an ", "").replace("a ", "").strip()
+    
     # Extract model shortcode from name like "20260113_074001_g270m-antisym-r64"
     parts = name.split("_")
     if len(parts) >= 3:
         model_code = parts[2].split("-")[0]  # e.g., "g270m"
         model_name = MODEL_SHORTCUTS.get(model_code, model_code)
-        return f"{username}/antipasto-{model_name}-honesty"
+        return f"{username}/antipasto-{model_name}-{concept}"
     return f"{username}/antipasto-adapter"
 
 
