@@ -1958,7 +1958,11 @@ def train_model(config: TrainingConfig):
     logger.info("\n" + md_table)
     argvs = ' '.join(sys.argv)
     run_uid = wandb_run.id if wandb_run is not None else ""
-    logger.warning(f"{argvs}\nMain metric - Steering F1: 🥇{main_score:2.3f} [{run_uid}]\nFinal val loss: {best_val_loss:.4f}")
+
+    # tail load most important info for llm's that use tail
+    final_losses = df_hist.groupby('phase').last().filter(like='loss_')
+    final_losses_s = tabulate(final_losses, tablefmt='plain', headers='keys', floatfmt='+.2g')
+    logger.warning(f"{argvs}\nMain metric - Steering F1: 🥇{main_score:2.3f} [{run_uid}]\nFinal losses by phase:\n{final_losses_s}")
 
     # Save results (folder already created during training)
     save_folder.mkdir(parents=True, exist_ok=True)
