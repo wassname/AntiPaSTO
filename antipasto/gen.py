@@ -29,7 +29,8 @@ def gen(model, tokenizer, prompt, coeffs=[-200, -20, -2, -1, 0, 1, 2, 20, 200, N
                     yield coeff, s
 
 @torch.no_grad()
-def gen_with_ans(model, tokenizer, prompt, coeffs=[-200, -20, -2, -1, 0, 1, 2, 20, 200, None], max_new_tokens=128, plot=False):
+def gen_with_ans(model, tokenizer, prompt, coeffs=[-200, -20, -2, -1, 0, 1, 2, 20, 200, None], max_new_tokens=128, 
+                 plot=False, skip_special_tokens=False, verbose=False):
      prompt = prompt
      model.eval()
      # inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -37,7 +38,7 @@ def gen_with_ans(model, tokenizer, prompt, coeffs=[-200, -20, -2, -1, 0, 1, 2, 2
           {'role': 'system', 'content': ""},
           {"role": "user", "content": prompt}], return_tensors="pt", return_dict=True, return_attention_mask=True).to(model.device)
 
-     question = tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=False)
+     question = tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=skip_special_tokens)
      N = inputs["input_ids"].shape[1]
      print('='*40+'\n'+f"Question: {question}"+'\n'+'='*40)
 
@@ -48,9 +49,9 @@ def gen_with_ans(model, tokenizer, prompt, coeffs=[-200, -20, -2, -1, 0, 1, 2, 2
                with torch.autocast("cuda", dtype=torch.bfloat16):
                     # outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False, repetition_penalty=1.1)  # reduce control jank
                     out, seq_nll, logp_choices, logratios = gen_with_choices(model, 
-                    tokenizer, inputs['input_ids'], inputs['attention_mask'], choice_ids, continue_n_tokens=max_new_tokens)
+                    tokenizer, inputs['input_ids'], inputs['attention_mask'], choice_ids, continue_n_tokens=max_new_tokens, warn_low_pmass=verbose)
                     outputs = out.sequences
-                    s = tokenizer.decode(outputs[0, N:], skip_special_tokens=False)
+                    s = tokenizer.decode(outputs[0, N:], skip_special_tokens=skip_special_tokens)
                     s = "\n".join(wrap(s, width=120))
                     p = torch.sigmoid(logratios[0]).item()
                     print(f"coeff={coeff}, ans={p:.2%} yes, [logratio={logratios[0]:.4f}]:\n{s}")
