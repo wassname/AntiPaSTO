@@ -239,4 +239,13 @@ def load_adapter(
     
     logger.info(f"Loaded adapter from {adapter_folder}")
     
+    # Load training_config.json if saved (optional, for display/inference metadata)
+    training_config = None
+    training_config_path = adapter_folder / "training_config.json"
+    if training_config_path.exists():
+        with open(training_config_path) as f:
+            training_config = json.load(f)
+        # Attach to model for easy access
+        model.antipasto_training_config = training_config
+    
     return model, tokenizer, layer_selection

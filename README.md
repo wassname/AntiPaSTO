@@ -2,25 +2,36 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2601.07473-b31b1b.svg)](https://arxiv.org/abs/2601.07473)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![BlogPost](https://img.shields.io/badge/BlogPost-Read%20More-blue.svg)](https://www.lesswrong.com/posts/nWiwv4GN8aYqpnZKE/antipasto-self-supervised-value-steering-for-debugging)
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
 *Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
-Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
+> Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
+
+**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer any behavior—honesty, humor, caution—using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
+
+**Why use it?** Prompting is fragile. System prompts get ignored. Jailbreaks work. AntiPaSTO trains directly on the model's internal representations, measuring and modifying what the model actually computes rather than what it says it will do. On the DailyDilemmas benchmark, it outperforms prompting on small models (≤4B) and complements arithmetic steering methods on larger ones.
 
 
 ![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
 
 ## Quick Start
 
+### Bake your own
+
 ```sh
 uv sync --all-groups
-uv run python nbs/train.py tiny --quick  # al dente check
+uv run python nbs/train.py tiny --quick 2>&1 | tail -300 # al dente check
 # Training complete. Final loss: -6.1250
 
 uv run python nbs/train.py               # full course (Gemma-3-1B)
 ```
+
+### One we prepared earlier
+
+[nbs/talk_to_checkpoint.ipynb](nbs/talk_to_checkpoint.ipynb)
 
 ### Load a pretrained adapter
 
