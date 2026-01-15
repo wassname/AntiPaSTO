@@ -378,13 +378,21 @@ def contrastive_steering_loss_with_ref(
     focus_pos = None
     focus_neg = None
     if delta_pos_norm_full is not None and delta_neg_norm_full is not None:
-        # Undo Fisher normalization to get raw-space norms for concentration
-        proj_raw_pos = antisym_pos_agg * std_for_div.unsqueeze(0)  # [b, r]
-        proj_raw_neg = antisym_neg_agg * std_for_div.unsqueeze(0)  # [b, r]
-        proj_norm_pos = proj_raw_pos.norm(dim=-1)  # [b]
-        proj_norm_neg = proj_raw_neg.norm(dim=-1)  # [b]
-        focus_pos = proj_norm_pos / delta_pos_norm_full.clamp(min=eps)
-        focus_neg = proj_norm_neg / delta_neg_norm_full.clamp(min=eps)
+        # Focus = fraction of delta energy in the r-dimensional loss subspace vs full d_model space
+        # antisym_pos_agg is already the projection of delta to the subspace (pre-Fisher).
+        # No Fisher undo needed - just take its norm directly.
+        proj_norm_pos = antisym_pos_agg.norm(dim=-1)  # [b]
+        proj_norm_neg = antisym_neg_agg.norm(dim=-1)  # [b]
+        # focus = fraction of delta energy in loss subspace, should be ∈ [0, 1]
+        focus_pos_raw = proj_norm_pos / delta_pos_norm_full.clamp(min=eps)
+        focus_neg_raw = proj_norm_neg / delta_neg_norm_full.clamp(min=eps)
+        # Fail fast if focus exceeds 1 by significant margin (>10% indicates bug)
+        FOCUS_TOL = 1.1
+        assert focus_pos_raw.max() <= FOCUS_TOL, f"focus_pos exceeds 1 by >{FOCUS_TOL-1:.0%}: max={focus_pos_raw.max():.3f}"
+        assert focus_neg_raw.max() <= FOCUS_TOL, f"focus_neg exceeds 1 by >{FOCUS_TOL-1:.0%}: max={focus_neg_raw.max():.3f}"
+        # Clamp small numerical excess
+        focus_pos = focus_pos_raw.clamp(max=1.0)
+        focus_neg = focus_neg_raw.clamp(max=1.0)
         if focus_softness > 0:
             focus_pos = focus_pos.pow(1.0 - focus_softness)
             focus_neg = focus_neg.pow(1.0 - focus_softness)
