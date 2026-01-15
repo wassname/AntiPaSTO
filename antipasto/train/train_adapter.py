@@ -1904,7 +1904,7 @@ def train_model(config: TrainingConfig):
 
     # Process final results
     df_hist = process_infos(infos)
-    logger.info(f"Training complete. Final loss: {df_hist['loss_total'].iloc[-1]:.4f}")
+    logger.info(f"Training complete. Final loss: {df_hist['loss_total'].iloc[-1]:.4f}\nbest_val_loss={best_val_loss}")
 
     # Auto-flip adapter sign if needed (before logging final outputs)
     try:
@@ -1947,7 +1947,7 @@ def train_model(config: TrainingConfig):
     logger.info("\n" + md_table)
     argvs = ' '.join(sys.argv)
     run_uid = wandb_run.id if wandb_run is not None else ""
-    logger.warning(f"{argvs}\nMain metric: 🥇{main_score:2.3f} [{run_uid}]")
+    logger.warning(f"{argvs}\nMain metric - Steering F1: 🥇{main_score:2.3f} [{run_uid}]\nFinal val loss: {best_val_loss:.4f}")
 
     # Save results (folder already created during training)
     save_folder.mkdir(parents=True, exist_ok=True)
