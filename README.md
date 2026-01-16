@@ -14,8 +14,6 @@
 
 **Why use it?** Prompting is fragile. System prompts get ignored. Jailbreaks work. AntiPaSTO trains directly on the model's internal representations, measuring and modifying what the model actually computes rather than what it says it will do. On the DailyDilemmas benchmark, it outperforms prompting on small models (≤4B) and complements arithmetic steering methods on larger ones.
 
-<img width="832" height="554" alt="Nano banana's attempt to draw the loss landscape, I'm not sure if it helps understand the loss, but I like it" src="https://github.com/user-attachments/assets/1363cafe-24a9-458a-8f05-66b27cf5cb12" />
-
 
 ![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
 
@@ -144,3 +142,8 @@ Built on the shoulders of other chefs:
   url = {https://arxiv.org/abs/2601.07473}
 }
 ```
+
+
+
+<img width="832" height="554" alt="Nano banana's attempt to draw the loss landscape, I'm not sure if it helps understand the loss, but I like it" src="https://github.com/user-attachments/assets/1363cafe-24a9-458a-8f05-66b27cf5cb12" />
+
