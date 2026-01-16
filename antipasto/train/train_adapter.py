@@ -126,10 +126,19 @@ def compute_batch_loss(
     coh_warmup_steps = resolve_warmup(config.coh_warmup_frac)
     conc_warmup_steps = resolve_warmup(config.conc_warmup_frac)
     
-    # Binary switch: constraints off during warmup, on after
-    effective_mono_weight = config.mono_weight if step >= mono_warmup_steps else 0.0
-    enable_coherence_effective = config.coh and (step >= coh_warmup_steps)
-    enable_concentration = step >= conc_warmup_steps
+    # Gradual linear ramp: 0 → full weight over warmup period
+    def ramp_weight(weight: float, warmup_steps: int) -> float:
+        if warmup_steps <= 0:
+            return weight
+        progress = min(1.0, step / warmup_steps)
+        return weight * progress
+    
+    effective_mono_weight = ramp_weight(config.mono_weight, mono_warmup_steps)
+    effective_coh_weight = ramp_weight(config.coh_weight, coh_warmup_steps) if config.coh else 0.0
+    enable_coherence_effective = config.coh  # Always enabled if config.coh=True, weight controls strength
+    # Focus warmup: interpolate focus_softness from 1.0 (disabled) to configured value
+    focus_warmup_progress = min(1.0, step / conc_warmup_steps) if conc_warmup_steps > 0 else 1.0
+    effective_focus_softness = 1.0 + (config.focus_softness - 1.0) * focus_warmup_progress
     
     attention_mask = batch["attention_mask"]
     mask_cho = attention_mask[::2]
@@ -258,7 +267,7 @@ def compute_batch_loss(
     delta_neg_norm_full = delta_neg_agg.norm(dim=-1)  # [b]
     
     # Antisymmetric loss (Fisher + align + delta_full)
-    # Disable concentration during warmup (delta_norm_full=None)
+    # Focus now uses gradual ramp via effective_focus_softness (1.0 = disabled, <1 = enabled)
     loss_dict = contrastive_steering_loss_with_ref(
         s_ref_cho=s_ref_cho,
         s_ref_rej=s_ref_rej,
@@ -270,9 +279,9 @@ def compute_batch_loss(
         last_n_tokens=config.n_last_tokens,
         orth_weight=config.orth_weight,
         antisym_margin=config.antisym_margin,
-        focus_softness=config.focus_softness,
-        delta_pos_norm_full=delta_pos_norm_full if enable_concentration else None,
-        delta_neg_norm_full=delta_neg_norm_full if enable_concentration else None,
+        focus_softness=effective_focus_softness,
+        delta_pos_norm_full=delta_pos_norm_full,
+        delta_neg_norm_full=delta_neg_norm_full,
         fisher_var_floor_frac=config.fisher_var_floor_frac,
         fisher_abs_std_floor=config.fisher_abs_std_floor,
         fisher_detach_std=config.fisher_detach_std,
@@ -324,7 +333,7 @@ def compute_batch_loss(
             ref_label_logp=ref_coherence,
             pi_label_logp=pi_coherence,
             mask=mask_logp,
-            scale=config.coh_weight,
+            scale=effective_coh_weight,
             ref_logits=ref_logits,
             pi_logits=pi_logits,
             coh_thresh_frac=config.coh_thresh,
@@ -1034,8 +1043,12 @@ def train_epoch(
             # Enable ONLY when coherence + monotonic + focus are ON, and only after
             # all warmups are finished (LR warmup + coh/mono warmups).
             warmup_steps = int(total_steps * config.warmup_pct) if total_steps else 0
-            mono_warmup_frac = config.mono_warmup_frac if config.mono_warmup_frac >= 0 else config.warmup_pct
-            coh_warmup_frac = config.coh_warmup_frac if config.coh_warmup_frac >= 0 else config.warmup_pct
+            
+            # resolve_warmup: -N → N × warmup_pct, else explicit
+            def resolve_warmup_frac(frac: float) -> float:
+                return (-frac) * config.warmup_pct if frac < 0 else frac
+            mono_warmup_frac = resolve_warmup_frac(config.mono_warmup_frac)
+            coh_warmup_frac = resolve_warmup_frac(config.coh_warmup_frac)
             mono_warmup_steps = int(total_steps * mono_warmup_frac) if total_steps else 0
             coh_warmup_steps = int(total_steps * coh_warmup_frac) if total_steps else 0
 
