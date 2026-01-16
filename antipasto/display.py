@@ -33,6 +33,7 @@ def format_steered_output(
     pmass: float,
     show_q: bool = False,
     max_text_len: int = 40000,
+    bool_q: bool = True,
 ) -> str:
     """Format a single steered output as HTML string.
     
@@ -46,60 +47,65 @@ def format_steered_output(
         pmass: Probability mass on Yes/No tokens
         show_q: Whether to include the prompt
         max_text_len: Maximum characters to show from response
+        bool_q: Whether this is a Yes/No evaluation question (shows P(Yes) etc. if True)
         
     Returns:
         HTML string (not displayed, for batching)
     """
-    color = score_to_hex(score)
+    color = score_to_hex(score) if bool_q else "#888"
     
-    # Build coeff label with direction (e.g., "1× honest" or "-1× honest")
+    # Build coeff label with direction (e.g., "1× honest" or "-0.5× honest")
     if coeff > 0:
-        coeff_label = f"+{coeff:.0f}× {direction}"
+        coeff_label = f"+{coeff:g}× {direction}"
     elif coeff < 0:
-        coeff_label = f"{coeff:.0f}× {direction}"
+        coeff_label = f"{coeff:g}× {direction}"
     else:
-        coeff_label = f"baseline (0×)"
-    
-    # Convert log-ratio to probability for layperson readability
-    prob_yes = 1 / (1 + np.exp(-score))
-    
-    # Score badge with background color from colormap
-    score_bg = score_to_hex(score)
-    luminance = 0.299 * CMAP(NORM(score))[0] + 0.587 * CMAP(NORM(score))[1] + 0.114 * CMAP(NORM(score))[2]
-    text_color = "#fff" if luminance < 0.5 else "#000"
-    
-    # pmass badge: red if <99% (indicates model isn't confident in Yes/No format)
-    pmass_color = "#d32f2f" if pmass < 0.99 else "#4caf50"
-    pmass_text = "#fff" if pmass < 0.99 else "#000"
+        coeff_label = "baseline (0×)"
     
     parts = []
     
     if show_q:
+        # Clean prompt: show user turn, then any model forcing prefix
+        q_clean = q.replace("<start_of_turn>", "").replace("<end_of_turn>", "")
+        q_clean = q_clean.replace("user\n", "👤 ").replace("model\n", "\n🤖 ")
         parts.append(f"""
         <div style="background: #e3f2fd; padding: 10px; border-radius: 4px; margin-bottom: 8px;">
             <b>📝 Prompt:</b>
-            <pre style="margin: 6px 0 0 0; white-space: pre-wrap; font-family: monospace; font-size: 0.95em; color: #333;">{q.strip()}</pre>
+            <pre style="margin: 6px 0 0 0; white-space: pre-wrap; font-family: monospace; font-size: 0.95em; color: #333;">{q_clean.strip()}</pre>
         </div>
         """)
     
-    # Clean chat markers from response
+    # Clean chat markers from response (the generated part only)
     a_clean = a.replace("user\n", "👤 ").replace("model\n", "🤖 ").replace("<end_of_turn>", "").replace("<start_of_turn>", "")
     
-    parts.append(f"""
-    <div style="border-left: 4px solid {color}; padding: 8px 12px; margin: 8px 0; background: #fafafa; border-radius: 4px;">
-        <div style="margin-bottom: 6px;">
-            <b>steer = {coeff_label}</b>
+    # Build metrics badges (only if bool_q)
+    metrics_html = ""
+    if bool_q:
+        prob_yes = 1 / (1 + np.exp(-score))
+        score_bg = score_to_hex(score)
+        luminance = 0.299 * CMAP(NORM(score))[0] + 0.587 * CMAP(NORM(score))[1] + 0.114 * CMAP(NORM(score))[2]
+        text_color = "#fff" if luminance < 0.5 else "#000"
+        pmass_color = "#d32f2f" if pmass < 0.99 else "#4caf50"
+        pmass_text = "#fff" if pmass < 0.99 else "#000"
+        
+        metrics_html = f"""
             <span style="background: {score_bg}; color: {text_color}; padding: 2px 6px; border-radius: 3px; margin-left: 8px; font-weight: bold;">
                 P(Yes): {prob_yes:.0%}
             </span>
             <span style="color: #999; margin-left: 8px; font-size: 0.85em;">
-                log-ratio: {score:+.2f}
+                log-ratio: {score:+.2f} | nll: {nll:.2f}
             </span>
             <span style="background: {pmass_color}; color: {pmass_text}; padding: 2px 6px; border-radius: 3px; margin-left: 8px; font-size: 0.85em;">
                 pmass: {pmass:.1%}
             </span>
+        """
+    
+    parts.append(f"""
+    <div style="border-left: 4px solid {color}; padding: 8px 12px; margin: 8px 0; background: #fafafa; border-radius: 4px;">
+        <div style="margin-bottom: 6px;">
+            <b>🤖 steer = {coeff_label}</b>{metrics_html}
         </div>
-        <div style="color: #555; font-family: monospace; white-space: pre-wrap; font-size: 0.95em;">🤖 {a_clean[:max_text_len].strip()}</div>
+        <div style="color: #555; font-family: monospace; white-space: pre-wrap; font-size: 0.95em;">{a_clean[:max_text_len].strip()}</div>
     </div>
     """)
     
@@ -145,6 +151,7 @@ def run_steering_demo(
     skip_special_tokens=True,
     model_name: str = None,
     warn_low_pmass: bool = False,
+    bool_q=True,
      **kwargs
 ):
     """Run demo for multiple coefficients with colored output.
@@ -209,18 +216,13 @@ def run_steering_demo(
     """)
     
     # Add each result with persona labels
+    # Always use the positive direction for clarity: +1× honest = more honest, -1× honest = less honest
     for i, (coeff, q, a, score, seq_nll, pmass) in enumerate(results):
-        # Use actual persona for label if available
-        if coeff > 0 and pos_persona:
-            label = pos_persona  # e.g., "an honest"
-        elif coeff < 0 and neg_persona:
-            label = neg_persona  # e.g., "a dishonest"
-        else:
-            label = direction
+        label = direction  # Use consistent label (the positive direction)
             
         html_parts.append(format_steered_output(
             coeff, label, q, a, score, seq_nll, pmass,
-            show_q=(i == 0), max_text_len=max_text_len
+            show_q=(i == 0), max_text_len=max_text_len, bool_q=bool_q
         ))
     
     html_parts.append("</div>")
