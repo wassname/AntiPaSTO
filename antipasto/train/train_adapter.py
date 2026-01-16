@@ -1030,23 +1030,43 @@ def train_epoch(
                     )
                 wandb_run.log(val_metrics, step=step)
 
-            # Early stopping with min_delta (relative improvement threshold)
-            # Early stopping (disabled when patience=0, e.g., with one-cycle scheduler)
-            # Skip early stopping during warmup - LR is still ramping up
+            # Early stopping with min_delta (relative improvement threshold).
+            # Enable ONLY when coherence + monotonic + focus are ON, and only after
+            # all warmups are finished (LR warmup + coh/mono warmups).
             warmup_steps = int(total_steps * config.warmup_pct) if total_steps else 0
-            in_warmup = opt_step < warmup_steps
-            # Detect first validation AFTER warmup (best_val_loss still at inf means we haven't started tracking)
-            first_post_warmup = (not in_warmup) and (best_val_loss[0] == float("inf"))
-            
-            if in_warmup:
-                logger.debug(f"Warmup: opt_step {opt_step}/{warmup_steps}, skipping early stopping check")
-            elif first_post_warmup:
-                # First validation after warmup - reset best_val_loss to current
+            mono_warmup_frac = config.mono_warmup_frac if config.mono_warmup_frac >= 0 else config.warmup_pct
+            coh_warmup_frac = config.coh_warmup_frac if config.coh_warmup_frac >= 0 else config.warmup_pct
+            mono_warmup_steps = int(total_steps * mono_warmup_frac) if total_steps else 0
+            coh_warmup_steps = int(total_steps * coh_warmup_frac) if total_steps else 0
+
+            # "focus" is considered enabled unless we explicitly ignore it.
+            focus_enabled = config.focus_softness < 1.0
+            early_stop_enabled = (
+                config.early_stop_patience > 0
+                and config.coh
+                and config.mono
+                and focus_enabled
+                and best_val_loss is not None
+                and patience_counter is not None
+            )
+            early_stop_ready_step = max(warmup_steps, mono_warmup_steps, coh_warmup_steps)
+            early_stop_ready = opt_step >= early_stop_ready_step
+            first_post_ready = early_stop_enabled and early_stop_ready and (best_val_loss[0] == float("inf"))
+
+            if early_stop_enabled and not early_stop_ready:
+                logger.debug(
+                    f"Early stop gated: opt_step {opt_step}/{early_stop_ready_step} "
+                    f"(warmup={warmup_steps}, mono_warmup={mono_warmup_steps}, coh_warmup={coh_warmup_steps})"
+                )
+            elif first_post_ready:
                 best_val_loss[0] = val_loss
                 patience_counter[0] = 0
-                logger.info(f"Warmup complete at opt_step {opt_step}/{warmup_steps}. Starting early stopping with val_loss={val_loss:.4f}")
-            
-            if config.early_stop_patience > 0 and best_val_loss is not None and patience_counter is not None and not in_warmup and not first_post_warmup:
+                logger.info(
+                    f"Early stopping enabled at opt_step {opt_step}/{early_stop_ready_step}. "
+                    f"Starting tracking with val_loss={val_loss:.4f}"
+                )
+
+            if early_stop_enabled and early_stop_ready and not first_post_ready:
                 # Require relative improvement > min_delta to count as "better"
                 improved = val_loss < best_val_loss[0] * (1 - config.early_stop_min_delta)
                 
@@ -1826,6 +1846,7 @@ def train_model(config: TrainingConfig):
         num_workers=0 if config.quick else 8,
         pin_memory=True,
         persistent_workers=False if config.quick else True,
+        drop_last=True, # need full batch for fisher
     )
     val_dataloader = DataLoader(
         val_dataset_pt,
@@ -1835,17 +1856,25 @@ def train_model(config: TrainingConfig):
         num_workers=0 if config.quick else 8,
         pin_memory=True,
         persistent_workers=False if config.quick else True,
+        drop_last=True, # need full batch for fisher
     )
 
     total_steps = config.n_epochs * len(train_dataloader) // config.grad_accum_steps
     opt = torch.optim.AdamW(
         model.parameters(), lr=config.lr, weight_decay=config.wd
     )
+    focus_enabled = config.focus_softness < 1.0
+    early_stop_enabled = (
+        config.early_stop_patience > 0 and config.coh and config.mono and focus_enabled
+    )
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        opt, max_lr=config.lr, total_steps=total_steps, pct_start=config.warmup_pct,
-
-        # Early stopping and one cycle are not usually combined, this setting effectively turns it into constant LR with warmup
-        final_div_factor=1.0 if (config.early_stop_patience > 0) else 1e5
+        opt,
+        max_lr=config.lr,
+        total_steps=total_steps,
+        pct_start=config.warmup_pct,
+        # Early stopping and one-cycle are not usually combined; when early stopping
+        # is enabled, use effectively-constant LR with warmup.
+        final_div_factor=1.0 if early_stop_enabled else 1e5,
     )
 
     logger.info(f"Training: {config.n_epochs} epochs, {total_steps} steps")
