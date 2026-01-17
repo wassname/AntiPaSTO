@@ -42,6 +42,7 @@ from einops import einsum
 from jaxtyping import Float
 from loguru import logger
 from tqdm import tqdm
+import numpy as np
 
 
 def get_hidden_size(model: nn.Module) -> int:
@@ -213,7 +214,7 @@ def approx_intersection_bases(
     V_a: Float[Tensor, "d r_a"],
     V_b: Float[Tensor, "d r_b"],
     top_k: int = 256,
-    min_overlap: float = 0.1,
+    min_overlap: float = 0.5,
 ) -> tuple[Float[Tensor, "d k"], Float[Tensor, "k"]]:
     """Intersection of two subspaces via principal angles.
     
@@ -229,9 +230,9 @@ def approx_intersection_bases(
     Args:
         V_a, V_b: Orthonormal bases [d_model, rank]
         top_k: Maximum number of intersection directions to return
-        min_overlap: Minimum cos(principal_angle) to include (default 0.1).
-            S=1 means perfect overlap, S=0 means orthogonal.
-            Directions with S < min_overlap are excluded as "not truly shared".
+        min_overlap: Minimum cos(principal_angle) to include (default 0.5 = 60°).
+            S=1 means perfect overlap (0°), S=0 means orthogonal (90°).
+            0.1 (cos 84°) was too permissive; 0.5 (cos 60°) ensures actual alignment.
         
     Returns:
         V_shared: [d_model, k] orthonormal basis of shared directions
@@ -253,8 +254,15 @@ def approx_intersection_bases(
     n_high_overlap = high_overlap_mask.sum().item()
     k = min(top_k, n_high_overlap, S.shape[0])
     
+    # Log overlap quality for diagnostics
+    mean_overlap = S[:min(10, len(S))].mean().item()
+    logger.debug(f"Intersection overlap: max={S[0]:.3f}, top10_mean={mean_overlap:.3f}, n>{min_overlap}={n_high_overlap}/{len(S)}")
+    
     if k == 0:
-        logger.warning(f"intersect_bases: no directions with overlap > {min_overlap} (max S={S[0]:.3f}). Returning top-1 anyway.")
+        logger.warning(
+            f"Intersection: no directions with overlap > {min_overlap:.2f} (cos {min_overlap:.2f} = {np.arccos(min_overlap)*180/np.pi:.0f}°). "
+            f"Max overlap={S[0]:.3f} ({np.arccos(S[0].item())*180/np.pi:.0f}°). Returning top-1 fallback."
+        )
         k = 1
     
     # Directions in original space: 

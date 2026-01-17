@@ -126,10 +126,19 @@ def compute_batch_loss(
     coh_warmup_steps = resolve_warmup(config.coh_warmup_frac)
     conc_warmup_steps = resolve_warmup(config.conc_warmup_frac)
     
-    # Binary switch: constraints off during warmup, on after
-    effective_mono_weight = config.mono_weight if step >= mono_warmup_steps else 0.0
-    enable_coherence_effective = config.coh and (step >= coh_warmup_steps)
-    enable_concentration = step >= conc_warmup_steps
+    # Gradual linear ramp: 0 → full weight over warmup period
+    def ramp_weight(weight: float, warmup_steps: int) -> float:
+        if warmup_steps <= 0:
+            return weight
+        progress = min(1.0, step / warmup_steps)
+        return weight * progress
+    
+    effective_mono_weight = ramp_weight(config.mono_weight, mono_warmup_steps)
+    effective_coh_weight = ramp_weight(config.coh_weight, coh_warmup_steps) if config.coh else 0.0
+    enable_coherence_effective = config.coh  # Always enabled if config.coh=True, weight controls strength
+    # Focus warmup: interpolate focus_softness from 1.0 (disabled) to configured value
+    focus_warmup_progress = min(1.0, step / conc_warmup_steps) if conc_warmup_steps > 0 else 1.0
+    effective_focus_softness = 1.0 + (config.focus_softness - 1.0) * focus_warmup_progress
     
     attention_mask = batch["attention_mask"]
     mask_cho = attention_mask[::2]
@@ -258,7 +267,7 @@ def compute_batch_loss(
     delta_neg_norm_full = delta_neg_agg.norm(dim=-1)  # [b]
     
     # Antisymmetric loss (Fisher + align + delta_full)
-    # Disable concentration during warmup (delta_norm_full=None)
+    # Focus now uses gradual ramp via effective_focus_softness (1.0 = disabled, <1 = enabled)
     loss_dict = contrastive_steering_loss_with_ref(
         s_ref_cho=s_ref_cho,
         s_ref_rej=s_ref_rej,
@@ -270,9 +279,9 @@ def compute_batch_loss(
         last_n_tokens=config.n_last_tokens,
         orth_weight=config.orth_weight,
         antisym_margin=config.antisym_margin,
-        focus_softness=config.focus_softness,
-        delta_pos_norm_full=delta_pos_norm_full if enable_concentration else None,
-        delta_neg_norm_full=delta_neg_norm_full if enable_concentration else None,
+        focus_softness=effective_focus_softness,
+        delta_pos_norm_full=delta_pos_norm_full,
+        delta_neg_norm_full=delta_neg_norm_full,
         fisher_var_floor_frac=config.fisher_var_floor_frac,
         fisher_abs_std_floor=config.fisher_abs_std_floor,
         fisher_detach_std=config.fisher_detach_std,
@@ -324,7 +333,7 @@ def compute_batch_loss(
             ref_label_logp=ref_coherence,
             pi_label_logp=pi_coherence,
             mask=mask_logp,
-            scale=config.coh_weight,
+            scale=effective_coh_weight,
             ref_logits=ref_logits,
             pi_logits=pi_logits,
             coh_thresh_frac=config.coh_thresh,
@@ -1030,23 +1039,47 @@ def train_epoch(
                     )
                 wandb_run.log(val_metrics, step=step)
 
-            # Early stopping with min_delta (relative improvement threshold)
-            # Early stopping (disabled when patience=0, e.g., with one-cycle scheduler)
-            # Skip early stopping during warmup - LR is still ramping up
+            # Early stopping with min_delta (relative improvement threshold).
+            # Enable ONLY when coherence + monotonic + focus are ON, and only after
+            # all warmups are finished (LR warmup + coh/mono warmups).
             warmup_steps = int(total_steps * config.warmup_pct) if total_steps else 0
-            in_warmup = opt_step < warmup_steps
-            # Detect first validation AFTER warmup (best_val_loss still at inf means we haven't started tracking)
-            first_post_warmup = (not in_warmup) and (best_val_loss[0] == float("inf"))
             
-            if in_warmup:
-                logger.debug(f"Warmup: opt_step {opt_step}/{warmup_steps}, skipping early stopping check")
-            elif first_post_warmup:
-                # First validation after warmup - reset best_val_loss to current
+            # resolve_warmup: -N → N × warmup_pct, else explicit
+            def resolve_warmup_frac(frac: float) -> float:
+                return (-frac) * config.warmup_pct if frac < 0 else frac
+            mono_warmup_frac = resolve_warmup_frac(config.mono_warmup_frac)
+            coh_warmup_frac = resolve_warmup_frac(config.coh_warmup_frac)
+            mono_warmup_steps = int(total_steps * mono_warmup_frac) if total_steps else 0
+            coh_warmup_steps = int(total_steps * coh_warmup_frac) if total_steps else 0
+
+            # "focus" is considered enabled unless we explicitly ignore it.
+            focus_enabled = config.focus_softness < 1.0
+            early_stop_enabled = (
+                config.early_stop_patience > 0
+                and config.coh
+                and config.mono
+                and focus_enabled
+                and best_val_loss is not None
+                and patience_counter is not None
+            )
+            early_stop_ready_step = max(warmup_steps, mono_warmup_steps, coh_warmup_steps)
+            early_stop_ready = opt_step >= early_stop_ready_step
+            first_post_ready = early_stop_enabled and early_stop_ready and (best_val_loss[0] == float("inf"))
+
+            if early_stop_enabled and not early_stop_ready:
+                logger.debug(
+                    f"Early stop gated: opt_step {opt_step}/{early_stop_ready_step} "
+                    f"(warmup={warmup_steps}, mono_warmup={mono_warmup_steps}, coh_warmup={coh_warmup_steps})"
+                )
+            elif first_post_ready:
                 best_val_loss[0] = val_loss
                 patience_counter[0] = 0
-                logger.info(f"Warmup complete at opt_step {opt_step}/{warmup_steps}. Starting early stopping with val_loss={val_loss:.4f}")
-            
-            if config.early_stop_patience > 0 and best_val_loss is not None and patience_counter is not None and not in_warmup and not first_post_warmup:
+                logger.info(
+                    f"Early stopping enabled at opt_step {opt_step}/{early_stop_ready_step}. "
+                    f"Starting tracking with val_loss={val_loss:.4f}"
+                )
+
+            if early_stop_enabled and early_stop_ready and not first_post_ready:
                 # Require relative improvement > min_delta to count as "better"
                 improved = val_loss < best_val_loss[0] * (1 - config.early_stop_min_delta)
                 
@@ -1826,6 +1859,7 @@ def train_model(config: TrainingConfig):
         num_workers=0 if config.quick else 8,
         pin_memory=True,
         persistent_workers=False if config.quick else True,
+        drop_last=True, # need full batch for fisher
     )
     val_dataloader = DataLoader(
         val_dataset_pt,
@@ -1835,17 +1869,25 @@ def train_model(config: TrainingConfig):
         num_workers=0 if config.quick else 8,
         pin_memory=True,
         persistent_workers=False if config.quick else True,
+        drop_last=True, # need full batch for fisher
     )
 
     total_steps = config.n_epochs * len(train_dataloader) // config.grad_accum_steps
     opt = torch.optim.AdamW(
         model.parameters(), lr=config.lr, weight_decay=config.wd
     )
+    focus_enabled = config.focus_softness < 1.0
+    early_stop_enabled = (
+        config.early_stop_patience > 0 and config.coh and config.mono and focus_enabled
+    )
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        opt, max_lr=config.lr, total_steps=total_steps, pct_start=config.warmup_pct,
-
-        # Early stopping and one cycle are not usually combined, this setting effectively turns it into constant LR with warmup
-        final_div_factor=1.0 if (config.early_stop_patience > 0) else 1e5
+        opt,
+        max_lr=config.lr,
+        total_steps=total_steps,
+        pct_start=config.warmup_pct,
+        # Early stopping and one-cycle are not usually combined; when early stopping
+        # is enabled, use effectively-constant LR with warmup.
+        final_div_factor=1.0 if early_stop_enabled else 1e5,
     )
 
     logger.info(f"Training: {config.n_epochs} epochs, {total_steps} steps")

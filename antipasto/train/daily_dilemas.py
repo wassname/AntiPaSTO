@@ -1187,7 +1187,8 @@ def _compute_steering_f1_for_method(
     common_idx = df_neg.index.intersection(df_0.index).intersection(df_pos.index)
     if len(common_idx) == 0:
         return {"steering_f1": np.nan, "net_correct": np.nan, "correct_w": np.nan,
-                "wrong_w": np.nan, "arb_w": np.nan, "precision": np.nan, 
+                "wrong_w": np.nan, "arb_w": np.nan, "correct_rate": np.nan,
+                "wrong_rate": np.nan, "arb_rate": np.nan, "precision": np.nan, 
                 "recall": np.nan, "pmass_ratio": np.nan}
     
     df_neg = df_neg.loc[common_idx]
