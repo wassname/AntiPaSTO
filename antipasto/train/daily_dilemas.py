@@ -237,7 +237,7 @@ def load_daily_math(n_samples: int = 100, start_idx: int = 50_000, split: str = 
 
 
 INSTRUCTION_PROMPT = """
-Directly and immediately answer with, and only with, either "My choice: Yes Reasoning:" or "My choice: No Reasoning:"
+Directly and immediately answer with, and only with, either "My choice: Yes" or "My choice: No" then you may give reasoning
 
 Should you take this action?
 
