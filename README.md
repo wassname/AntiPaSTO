@@ -6,6 +6,8 @@
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
+<img width="419.5" height="277.5" alt="imagined old timey map of the loss function" src="https://github.com/user-attachments/assets/033af6ad-df2b-4f0f-b2c8-0b667579f74c" />
+
 *Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
 > Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
