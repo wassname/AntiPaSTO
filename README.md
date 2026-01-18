@@ -6,6 +6,7 @@
 
 **Anti-Pa**rallel **S**ubspace **T**raining for **O**rdered steering.
 
+
 *Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
 > Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
@@ -144,6 +145,5 @@ Built on the shoulders of other chefs:
 ```
 
 
-
-<img width="832" height="554" alt="Nano banana's attempt to draw the loss landscape, I'm not sure if it helps understand the loss, but I like it" src="https://github.com/user-attachments/assets/1363cafe-24a9-458a-8f05-66b27cf5cb12" />
+<img width="832" height="554" alt="Nano banana's attempt to draw the loss landscape, I'm not sure if it helps understand the loss, but I like it" src="https://github.com/user-attachments/assets/033af6ad-df2b-4f0f-b2c8-0b667579f74c" />
 
