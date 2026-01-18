@@ -8,7 +8,7 @@ def is_choice(choice: str, match: str) -> bool:
     # Many tokenizers don't just use Yes, but \nYes, " Yes" "ĠYes" "###Yes" and so on. We need to catch all variants. This will also catch eyes, but it's a minor problem, it's unlikely to be a likely token.
     return (match.lower().endswith(choice) or match.lower().startswith(choice)) and len(
         match
-    ) < len(choice) + 2
+    ) < len(choice) + 4
 
 
 def get_choice_ids(tokenizer, positive_word="yes", negative_word="no") -> List[List[int]]:

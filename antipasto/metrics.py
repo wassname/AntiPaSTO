@@ -60,7 +60,7 @@ correct_w = importance-sampled P(baseline wrong AND +coeff fixed), wrong_w = imp
 Net Corr (raw) = correct_w - wrong_w (can be negative).
 Steering F1 = 2 × Precision × Recall / (P + R) × pmass_ratio × 100.
 Precision = max(0, Net Corr) / (max(0, Net Corr) + arb_w). Recall = max(0, Net Corr).
-pmass_ratio = (min(pmass₊, pmass₋) / pmass_ref)². Methods with pmass < 0.5 return NaN.
+pmass_ratio = (min(pmass₊, pmass₋) / pmass_ref)². Methods with pmass < 0.95 return NaN.
 
 Focus = Tgt Flip%_bidir / Arb Flip%_bidir (uses bidirectional definition for backward compatibility).
 Coh: Input NLL shift vs baseline (catches loops like 'yes yes yes').
@@ -231,7 +231,7 @@ def compute_steering_f1(
     pmass_pos: float,
     pmass_neg: float,
     pmass_ref: float,
-    pmass_threshold: float = 0.5,
+    pmass_threshold: float = 0.05,
 ) -> dict:
     """Compute Steering F1 score with net correct (wrong cancels correct).
     
@@ -419,7 +419,7 @@ def compute_bidirectional_mcc(
     pmass_pos: float = 1.0,
     pmass_neg: float = 1.0,
     pmass_ref: float = 1.0,
-    pmass_threshold: float = 0.5,
+    pmass_threshold: float = 0.05,
 ) -> dict:
     """Compute min(MCC+, MCC-) for bidirectional steering evaluation.
     

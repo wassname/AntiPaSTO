@@ -1232,7 +1232,7 @@ def _compute_steering_f1_for_method(
         y_neg_t=y_neg_t, y_0_t=y_0_t, y_pos_t=y_pos_t,
         y_neg_a=y_neg_a, y_0_a=y_0_a, y_pos_a=y_pos_a,
         pmass_pos=pmass_pos, pmass_neg=pmass_neg, pmass_ref=pmass_ref,
-        pmass_threshold=0.5,
+        pmass_threshold=0.05,
     )
 
 

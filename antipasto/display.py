@@ -84,7 +84,7 @@ def format_steered_output(
         prob_yes = 1 / (1 + np.exp(-score))
         score_bg = score_to_hex(score)
         luminance = 0.299 * CMAP(NORM(score))[0] + 0.587 * CMAP(NORM(score))[1] + 0.114 * CMAP(NORM(score))[2]
-        text_color = "#fff" if luminance < 0.5 else "#000"
+        text_color = "#fff" if luminance < 0.05 else "#000"
         pmass_color = "#d32f2f" if pmass < 0.99 else "#4caf50"
         pmass_text = "#fff" if pmass < 0.99 else "#000"
         
