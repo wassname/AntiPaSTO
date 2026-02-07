@@ -1,4 +1,4 @@
-# 🍝 AntiPaSTO: Self-Supervised Steering of Moral Reasoning
+# 🍝 AntiPaSTO: Self-Supervised Honesty Steering via Anti-Parallel Representations
 
 [![arXiv](https://img.shields.io/badge/arXiv-2601.07473-b31b1b.svg)](https://arxiv.org/abs/2601.07473)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
