@@ -133,6 +133,8 @@ I am working on v2 which
 - larger models
 - better metric
 
+If you would like to colaborate, please reach out.
+
 ## Acknowledgments
 
 Built on the shoulders of other chefs:
