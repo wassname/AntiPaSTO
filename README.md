@@ -17,8 +17,8 @@
 
 So you could 
 - *Beat eval awareness*: steer them toward credulity and honesty, so that they take the eval at face value, and give honest answer.
-- *Find deeper moral preference**, just ask them moral question with, and without, honesty steering. Does their stated moral values change?
-- find the `assistant axis` and swap it for the philosopher-king
+- *Find deeper moral preference*, just ask them moral question with, and without, honesty steering. Does their stated moral values change?
+- find the `assistant axis` and swap it for the philosopher-king dedicated to public service
 
 
 ![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
@@ -125,6 +125,13 @@ outputs/adapters/    # trained models (ready to serve)
 ## Status
 
 *Still simmering.* Full research history (experiments, ablations, burnt batches) available on request.
+
+I am working on v2 which
+- removes SVD for full lora (I found that changing the loss to prevent drift allows this)
+- reduces init variance
+- more expressive personas
+- larger models
+- better metric
 
 ## Acknowledgments
 
