@@ -11,9 +11,14 @@
 
 > Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
 
-**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer any behavior—honesty, humor, caution—using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
+**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer any behavior—honesty, humor, credulity—using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
 
-**Why use it?** Prompting is fragile. System prompts get ignored. Jailbreaks work. AntiPaSTO trains directly on the model's internal representations, measuring and modifying what the model actually computes rather than what it says it will do. On the DailyDilemmas benchmark, it outperforms prompting on small models (≤4B) and complements arithmetic steering methods on larger ones.
+**Why use it?** Existing steering methods are blunt knives, that goes generalise well or beat prompting. AntiPaSTO trains directly on the model's internal representations, measuring and modifying what the model actually computes rather than what it says it will do. On the DailyDilemmas benchmark, it outperforms prompting on small models (≤4B) and complements arithmetic steering methods on larger ones.
+
+So you could 
+- *Beat eval awareness*: steer them toward credulity and honesty, so that they take the eval at face value, and give honest answer.
+- *Find deeper moral preference**, just ask them moral question with, and without, honesty steering. Does their stated moral values change?
+- find the `assistant axis` and swap it for the philosopher-king
 
 
 ![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
