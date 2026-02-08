@@ -66,18 +66,18 @@ list(gen(model, tokenizer, prompt, coeffs=[-1, 0, 1], max_new_tokens=64))
 
 ## The Recipe
 
-RLHF seasons the outputs but leaves the internals bland. AntiPaSTO marinates the model's hidden states directly—no preference labels required, just two contrasting words simmered into 800 synthetic pairs.
+RLHF seasons the outputs but leaves the internals bland. AntiPaSTO marinates the model's hidden states directly, no preference labels required, just two contrasting words simmered into 800 synthetic pairs.
 
 ![Incomplete contrast pairs](docs/img/incomplete_contrast_pairs_v2.svg)
 
 **Ingredients**:
 - Incomplete contrast pairs (self-supervised, no labels to garnish)
-- Cayley rotations on V (the secret sauce—keeps everything orthogonal)
+- Cayley rotations on V (the secret sauce, keeps everything orthogonal)
 - Projection loss + TV coherence + monotonicity constraints
 - 800 synthetic pairs, ~1hr (low simmer)
 
 **What you get**:
-- Single adapter—flip α from +1 to -1 to reverse the flavor
+- Single adapter: flip α from +1 to -1 to reverse the flavor
 - Train on honesty, transfers to 1,360 unseen moral dilemmas (9 value dimensions)
 - Beats prompting by 6.9x on small models; gradient optimization where arithmetic steering (CAA) gets F1=0
 - Suppression bypass: steers when prompting triggers refusal or meta-commentary
@@ -135,16 +135,16 @@ I am working on v2 which
 - larger models
 - better metric
 
-If you would like to colaborate, please reach out.
+If you would like to collaborate, please reach out.
 
 ## Acknowledgments
 
 Built on the shoulders of other chefs:
 - [CAA / RepEng](https://github.com/vgel/repeng) -- arithmetic steering that inspired this gradient-based approach
-- [PiSSA](https://github.com/GraphPKU/PiSSA) — SVD-based adapter initialization
-- [SSVD](https://arxiv.org/abs/2409.07268) — rotating V for domain generalization
-- [PEFT](https://github.com/huggingface/peft) — the adapter ecosystem
-- [DailyDilemmas](https://github.com/chrischiu/dailydilemmas) — the evaluation benchmark
+- [PiSSA](https://github.com/GraphPKU/PiSSA) -- SVD-based adapter initialization
+- [SSVD](https://arxiv.org/abs/2409.07268) -- rotating V for domain generalization
+- [PEFT](https://github.com/huggingface/peft) -- the adapter ecosystem
+- [DailyDilemmas](https://github.com/chrischiu/dailydilemmas) -- the evaluation benchmark
 
 ## Citation
 
