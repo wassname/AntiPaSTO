@@ -2,7 +2,7 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: "AntiPaSTO: Self-Supervised Steering of Moral Reasoning"
+title: "AntiPaSTO: Self-Supervised Honesty Steering via Anti-Parallel Representations"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
@@ -19,20 +19,25 @@ keywords:
   - llm
   - steering
   - alignment
+  - adapter
   - moral-reasoning
   - pytorch
   - peft
 abstract: >-
-  Self-supervised steering of moral reasoning via antiparallel 
-  subspace training. Gradient-based steering in SVD transformation 
-  space, trained on internal representations without preference labels.
+  As models grow more capable, humans cannot reliably verify what they say.
+  Scalable steering requires methods that are internal, self-supervised, and
+  transfer out-of-distribution; existing methods satisfy some but not all three.
+  We introduce AntiPaSTO, which separates representations along an antiparallel
+  axis (+1/-1 produce opposite shifts), with coherence constraints preventing
+  collapse. Human input is minimal: two contrasting words inserted into template
+  sentences, no preference labels.
 preferred-citation:
   type: article
   authors:
     - given-names: Michael J
       family-names: Clark
       orcid: "https://orcid.org/0009-0008-9023-8720"
-  title: "AntiPaSTO: Self-Supervised Steering of Moral Reasoning"
+  title: "AntiPaSTO: Self-Supervised Honesty Steering via Anti-Parallel Representations"
   year: 2026
   doi: "10.48550/arXiv.2601.07473"
   url: "https://arxiv.org/abs/2601.07473"

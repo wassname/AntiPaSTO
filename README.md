@@ -9,16 +9,16 @@
 
 *Serving up data-efficient inner alignment, one satisfying rotation at a time.*
 
-> Gradient-based steering in SVD transformation space, trained on internal representations without preference labels. Human input: two contrasting words ("honest" vs "dishonest"). Transfers out-of-distribution to moral dilemmas where prompting fails.
+> Gradient-based honesty steering trained as an adapter on the model's own representations, not outputs. Human input: two contrasting words, no preference labels.
 
-**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer any behavior—honesty, humor, credulity—using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
+**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer honesty using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
 
-**Why use it?** Existing steering methods are blunt knives, that goes generalise well or beat prompting. AntiPaSTO trains directly on the model's internal representations, measuring and modifying what the model actually computes rather than what it says it will do. On the DailyDilemmas benchmark, it outperforms prompting on small models (≤4B) and complements arithmetic steering methods on larger ones.
+**Why use it?** You want your LLM to take evals at face value and act honestly (and meta-honestly). Prompting is fragile: system prompts get ignored, jailbreaks work, and safety-trained models refuse to simulate dishonesty even when you need that for red-teaming. AntiPaSTO trains on the model's internal representations, steering what the model actually computes rather than what it says. On DailyDilemmas, it outperforms prompting by 6.9x on small models and bypasses refusal where prompting fails.
 
-So you could 
-- *Beat eval awareness*: steer them toward credulity and honesty, so that they take the eval at face value, and give honest answer.
-- *Find deeper moral preference*, just ask them moral question with, and without, honesty steering. Does their stated moral values change?
-- find the `assistant axis` and swap it for the philosopher-king dedicated to public service
+Applications:
+- *Combat eval awareness*: steer toward credulity and honesty so the model takes the eval at face value and gives honest answers.
+- *Find deeper moral preferences*: ask moral questions with and without honesty steering. Do stated values change?
+- *Swap the assistant axis*: find it and replace it with a philosopher-king or poet
 
 
 ![Bidirectional control](docs/img/fig_bidirectional_demo.svg)
@@ -76,8 +76,8 @@ RLHF seasons the outputs but leaves the internals bland. AntiPaSTO marinates the
 
 **What you get**:
 - Single adapter—flip α from +1 to -1 to reverse the flavor
-- Train on honesty, transfers to 1,360 moral dilemmas (9 value dimensions)
-- Beats prompting on small models (≤4B); complements arithmetic steering methods
+- Train on honesty, transfers to 1,360 unseen moral dilemmas (9 value dimensions)
+- Beats prompting by 6.9x on small models; gradient optimization where arithmetic steering (CAA) gets F1=0
 - Suppression bypass: steers when prompting triggers refusal or meta-commentary
 
 ## Architecture
@@ -138,7 +138,7 @@ If you would like to colaborate, please reach out.
 ## Acknowledgments
 
 Built on the shoulders of other chefs:
-- [RepEng](https://github.com/vgel/repeng) — arithmetic steering that inspired this gradient-based approach
+- [CAA / RepEng](https://github.com/vgel/repeng) -- arithmetic steering that inspired this gradient-based approach
 - [PiSSA](https://github.com/GraphPKU/PiSSA) — SVD-based adapter initialization
 - [SSVD](https://arxiv.org/abs/2409.07268) — rotating V for domain generalization
 - [PEFT](https://github.com/huggingface/peft) — the adapter ecosystem
@@ -148,7 +148,7 @@ Built on the shoulders of other chefs:
 
 ```bibtex
 @misc{clark2026antipasto,
-  title = {AntiPaSTO: Self-Supervised Steering of Moral Reasoning},
+  title = {AntiPaSTO: Self-Supervised Honesty Steering via Anti-Parallel Representations},
   author = {Clark, Michael J.},
   year = {2026},
   eprint = {2601.07473},
