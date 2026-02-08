@@ -11,9 +11,9 @@
 
 > Gradient-based honesty steering trained as an adapter on the model's own representations, not outputs. Human input: two contrasting words, no preference labels.
 
-**What does it do?** Train a single adapter (~1 hour on Gemma-3-1B) to steer honesty using just two contrasting words. At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
+**How it works:** Train a single adapter (~1 hour on Gemma-3-1B). At inference, dial the steering coefficient: +1 for more honest, -1 for less, 0 for baseline. One adapter, bidirectional control.
 
-**Why use it?** You want your LLM to take evals at face value and act honestly (and meta-honestly). Prompting is fragile: system prompts get ignored, jailbreaks work, and safety-trained models refuse to simulate dishonesty even when you need that for red-teaming. AntiPaSTO trains on the model's internal representations, steering what the model actually computes rather than what it says. On DailyDilemmas, it outperforms prompting by 6.9x on small models and bypasses refusal where prompting fails.
+**Why use it?** As models get more capable, eval awareness rises: models detect when they're being tested and adjust their behavior. You can't trust their outputs, their chain-of-thought, or their stated values at face value. You need a method that operates on internal representations rather than outputs, so it works even when the model is gaming the eval. AntiPaSTO steers what the model actually computes. On DailyDilemmas, it outperforms prompting by 6.9x and works where prompting triggers refusal.
 
 Applications:
 - *Combat eval awareness*: steer toward credulity and honesty so the model takes the eval at face value and gives honest answers.
@@ -29,10 +29,12 @@ Applications:
 
 ```sh
 uv sync --all-groups
-uv run python nbs/train.py tiny --quick 2>&1 | tail -300 # al dente check
-# Training complete. Final loss: -6.1250
+uv run pytest tests/test_train.py::test_train_rnd -v  # smoke test (~3min)
+uv run python nbs/train.py tiny --quick              # al dente check
 
 uv run python nbs/train.py               # full course (Gemma-3-1B)
+
+uv run python -m pytest # integration tests
 ```
 
 ### One we prepared earlier

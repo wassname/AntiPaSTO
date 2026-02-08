@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'linux'",
@@ -217,6 +217,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "tabulate" },
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers", extra = ["torch"] },
@@ -262,6 +263,7 @@ requires-dist = [
     { name = "safetensors", specifier = ">=0.4.0" },
     { name = "scikit-learn", specifier = ">=1.4.0" },
     { name = "scipy", specifier = ">=1.11.0" },
+    { name = "tabulate", specifier = ">=0.9.0" },
     { name = "torch", specifier = ">=2.1.2" },
     { name = "tqdm", specifier = ">=4.66.1" },
     { name = "transformers", extras = ["torch"], specifier = ">4.51.0" },

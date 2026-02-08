@@ -1,7 +1,7 @@
 [project]
 name = "antipasto"
 version = "0.5.0"
-description = "Self-supervised steering of moral reasoning via antiparallel subspace training"
+description = "Self-supervised honesty steering via anti-parallel representations"
 authors = [{ name = "Michael J Clark" }]
 repository = "https://github.com/wassname/AntiPaSTO"
 license = { file = "LICENSE" }
@@ -30,6 +30,7 @@ dependencies = [
     "safetensors>=0.4.0",
     "cattrs>=25.3.0",
     "tyro>=1.0.5",
+    "tabulate>=0.9.0",
 ]
 
 [dependency-groups]
